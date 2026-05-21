@@ -65,7 +65,7 @@ export default async function AdminHomePage() {
           title="Campaigns"
           description="Upload CSV, choose template, run a campaign."
           href="/admin/campaigns"
-          ready={false}
+          ready={true}
         />
       </div>
     </div>

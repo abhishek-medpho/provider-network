@@ -89,18 +89,28 @@ export default async function FormDetailPage({
         ← All forms
       </Link>
 
-      <header className="mb-6">
-        <div className="flex items-center gap-2 mb-1">
-          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-            {form.name}
-          </h1>
-          <StatusBadge status={form.status} />
+      <header className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+              {form.name}
+            </h1>
+            <StatusBadge status={form.status} />
+          </div>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            {PURPOSE_LABELS[form.purpose]} ·{" "}
+            {form.profileType ? form.profileType.label : "All roles"} · v
+            {form.version}
+          </p>
         </div>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          {PURPOSE_LABELS[form.purpose]} ·{" "}
-          {form.profileType ? form.profileType.label : "All roles"} · v
-          {form.version}
-        </p>
+        <Link
+          href={`/onboard/preview/${form.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="px-3 py-1.5 rounded-md border border-zinc-300 dark:border-zinc-700 text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800 whitespace-nowrap"
+        >
+          Preview ↗
+        </Link>
       </header>
 
       {/* Metadata edit */}
