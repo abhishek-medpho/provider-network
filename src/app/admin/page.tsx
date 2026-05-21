@@ -51,7 +51,7 @@ export default async function AdminHomePage() {
           title="Messages"
           description="WhatsApp templates for invites and reminders."
           href="/admin/messages"
-          ready={false}
+          ready={true}
         />
         <SectionCard
           title="Campaigns"
