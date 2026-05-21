@@ -35,7 +35,7 @@ export default async function AdminHomePage() {
           title="Care Providers"
           description="List, filter, and inspect onboarded providers."
           href="/admin/care-providers"
-          ready={false}
+          ready={true}
         />
         <SectionCard
           title="Attributes"
