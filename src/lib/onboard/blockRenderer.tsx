@@ -7,6 +7,7 @@
  */
 import type { Attribute } from "@prisma/client";
 import type { FormBlock, FormSection } from "@/lib/types/form";
+import GeoPointField from "./GeoPointField";
 
 type AttributeOption = { value: string; label: string };
 
@@ -496,6 +497,36 @@ function renderAttributeInput({
                 ? "PDF or photo of the document"
                 : "Opens your camera"}
           </p>
+          {helpEl}
+        </div>
+      );
+    }
+    case "GEO_POINT": {
+      const initial = (() => {
+        const v = values[attr.key];
+        if (
+          v &&
+          typeof v === "object" &&
+          "lat" in v &&
+          "lng" in v
+        ) {
+          return v as {
+            lat: number;
+            lng: number;
+            accuracy: number;
+            capturedAt: string;
+          };
+        }
+        return undefined;
+      })();
+      return (
+        <div>
+          {labelEl}
+          <GeoPointField
+            name={attr.key}
+            initial={initial}
+            required={required}
+          />
           {helpEl}
         </div>
       );

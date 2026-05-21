@@ -57,6 +57,7 @@ const STRUCTURE: { key: string; title: string; description?: string; attributeKe
       "We match you to nearby jobs based on your home pincode and travel radius.",
     attributeKeys: [
       "pincode_home",
+      "home_location",
       "service_radius_km",
       "transport_mode",
     ],

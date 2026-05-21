@@ -442,6 +442,10 @@ function formatValue(
     return <FileValue value={value} type={type} />;
   }
 
+  if (type === "GEO_POINT") {
+    return <GeoValue value={value} />;
+  }
+
   if (type === "SINGLE_SELECT") {
     const opts = Array.isArray(options) ? (options as Option[]) : [];
     const found = opts.find((o) => o.value === value);
@@ -473,6 +477,42 @@ function formatValue(
     return String(value);
   }
   return String(value);
+}
+
+function GeoValue({ value }: { value: unknown }) {
+  if (!value || typeof value !== "object") {
+    return <span className="text-zinc-400">—</span>;
+  }
+  const v = value as {
+    lat?: number;
+    lng?: number;
+    accuracy?: number | null;
+    capturedAt?: string;
+  };
+  if (typeof v.lat !== "number" || typeof v.lng !== "number") {
+    return <span className="text-zinc-400">—</span>;
+  }
+  const mapsUrl = `https://www.google.com/maps?q=${v.lat},${v.lng}`;
+  return (
+    <div className="space-y-0.5">
+      <a
+        href={mapsUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 text-zinc-900 dark:text-zinc-50 hover:underline font-mono text-xs"
+      >
+        📍 {v.lat.toFixed(5)}, {v.lng.toFixed(5)} ↗
+      </a>
+      <div className="text-xs text-zinc-500 dark:text-zinc-400">
+        {v.accuracy != null ? `±${Math.round(v.accuracy)}m` : "accuracy unknown"}
+        {v.capturedAt && (
+          <span className="ml-2">
+            · captured {new Date(v.capturedAt).toLocaleString()}
+          </span>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function FileValue({ value, type }: { value: unknown; type: string }) {

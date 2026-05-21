@@ -44,6 +44,9 @@ enum AttributeType {
   RICH_TEXT
   SECTION_HEADING
   INFO_BLOCK
+  /// Lat/lng captured via HTML5 Geolocation API. Stored as JSON:
+  /// { lat, lng, accuracy (meters), capturedAt (ISO string) }
+  GEO_POINT
 }
 
 enum PiiLevel {

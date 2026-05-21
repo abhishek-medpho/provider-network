@@ -139,6 +139,36 @@ function coerce(
       return { value: truthy };
     }
 
+    case "GEO_POINT": {
+      if (!single) {
+        return required ? { value: null, error: "required" } : { value: null };
+      }
+      try {
+        const parsed = JSON.parse(single) as {
+          lat?: unknown;
+          lng?: unknown;
+          accuracy?: unknown;
+          capturedAt?: unknown;
+        };
+        const lat = Number(parsed.lat);
+        const lng = Number(parsed.lng);
+        if (!Number.isFinite(lat) || lat < -90 || lat > 90)
+          return { value: null, error: "invalid latitude" };
+        if (!Number.isFinite(lng) || lng < -180 || lng > 180)
+          return { value: null, error: "invalid longitude" };
+        const accuracy = Number.isFinite(Number(parsed.accuracy))
+          ? Number(parsed.accuracy)
+          : null;
+        const capturedAt =
+          typeof parsed.capturedAt === "string"
+            ? parsed.capturedAt
+            : new Date().toISOString();
+        return { value: { lat, lng, accuracy, capturedAt } };
+      } catch {
+        return { value: null, error: "invalid location payload" };
+      }
+    }
+
     case "SELFIE":
     case "FILE_IMAGE":
     case "FILE_DOC":
