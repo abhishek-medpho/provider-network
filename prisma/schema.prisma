@@ -114,6 +114,17 @@ enum FormTemplateStatus {
   ARCHIVED
 }
 
+/// What stage of the care-provider lifecycle this form serves.
+/// Drives which block types are typically used and which actions
+/// the renderer wires up.
+enum FormPurpose {
+  ONBOARDING                // capture provider profile (invite form)
+  APPOINTMENT_CONFIRM       // show patient details + accept/decline buttons
+  APPOINTMENT_EXECUTION     // during visit: display details + capture data
+  POST_APPOINTMENT          // completion form
+  CUSTOM
+}
+
 enum AdminRole {
   SUPER_ADMIN
   ADMIN
@@ -200,15 +211,29 @@ model ProfileTypeAttribute {
 // FORM TEMPLATES
 // ============================================================================
 
-/// A renderable view of a ProfileType. Versioned — publishing creates an
-/// immutable version. MVP can auto-generate a default form from ProfileType
-/// attributes; this table stores explicitly-designed alternatives.
+/// A configurable form surface. One template per (purpose × profile type ×
+/// version). Sections contain typed blocks (ATTRIBUTE / DISPLAY / INFO /
+/// HEADING) so the same model serves onboarding (mostly inputs), appointment
+/// confirmation (mostly display + buttons), and execution forms (mixed).
 model FormTemplate {
   id              String              @id @default(cuid())
   name            String
-  profileTypeId   String
+  purpose         FormPurpose         @default(ONBOARDING)
+  profileTypeId   String?             // null = applies to all profile types
   layout          String              @default("ONE_PER_SCREEN") // ONE_PER_SCREEN | MULTI_PAGE | SINGLE_PAGE
-  sections        Json                // [{ key, title, titleLocalized, attributeIds: [...] }]
+
+  /// [{ key, title, description, blocks: [
+  ///   { type: 'ATTRIBUTE', attributeId, isRequired?, overrideLabel? },
+  ///   { type: 'DISPLAY', label, contextPath, helpText? },
+  ///   { type: 'INFO', text },
+  ///   { type: 'HEADING', text }
+  /// ]}]
+  sections        Json
+
+  /// [{ key, label, kind, style? }]
+  /// kind: SUBMIT | ACCEPT | DECLINE | COMPLETE | NEXT
+  actions         Json?
+
   submitParts     Json?               // [{ partKey, sectionKeys, statusOnSubmit, nextMessageTemplateId }]
   themeId         String?
   status          FormTemplateStatus  @default(DRAFT)
@@ -218,10 +243,11 @@ model FormTemplate {
   updatedAt       DateTime            @updatedAt
   archivedAt      DateTime?
 
-  profileType     ProfileType         @relation(fields: [profileTypeId], references: [id])
+  profileType     ProfileType?        @relation(fields: [profileTypeId], references: [id])
   campaigns       Campaign[]
 
   @@index([profileTypeId, status])
+  @@index([purpose, status])
 }
 
 // ============================================================================

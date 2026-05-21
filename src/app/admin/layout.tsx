@@ -7,6 +7,7 @@ const navItems = [
   { href: "/admin/care-providers", label: "Care Providers", icon: "👥" },
   { href: "/admin/attributes", label: "Attributes", icon: "◧" },
   { href: "/admin/profile-types", label: "Profile Types", icon: "▢" },
+  { href: "/admin/forms", label: "Forms", icon: "▤" },
   { href: "/admin/messages", label: "Messages", icon: "✉" },
   { href: "/admin/campaigns", label: "Campaigns", icon: "▶" },
 ];

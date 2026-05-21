@@ -2,11 +2,12 @@ import { prisma } from "@/lib/db";
 import Link from "next/link";
 
 export default async function AdminHomePage() {
-  const [careProviderCount, profileTypeCount, attributeCount, campaignCount, messageTemplateCount] =
+  const [careProviderCount, profileTypeCount, attributeCount, formCount, campaignCount, messageTemplateCount] =
     await Promise.all([
       prisma.careProvider.count(),
       prisma.profileType.count({ where: { active: true } }),
       prisma.attribute.count({ where: { archivedAt: null } }),
+      prisma.formTemplate.count({ where: { status: { not: "ARCHIVED" } } }),
       prisma.campaign.count(),
       prisma.messageTemplate.count({ where: { active: true } }),
     ]);
@@ -20,10 +21,11 @@ export default async function AdminHomePage() {
         Welcome back.
       </p>
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8 max-w-5xl">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-8 max-w-6xl">
         <StatCard label="Care providers" value={careProviderCount} href="/admin/care-providers" />
         <StatCard label="Profile types" value={profileTypeCount} href="/admin/profile-types" />
         <StatCard label="Attributes" value={attributeCount} href="/admin/attributes" />
+        <StatCard label="Forms" value={formCount} href="/admin/forms" />
         <StatCard label="Messages" value={messageTemplateCount} href="/admin/messages" />
         <StatCard label="Campaigns" value={campaignCount} href="/admin/campaigns" />
       </div>
@@ -46,6 +48,12 @@ export default async function AdminHomePage() {
           description="Bundle attributes into roles like Nurse, Phlebo."
           href="/admin/profile-types"
           ready={false}
+        />
+        <SectionCard
+          title="Forms"
+          description="Configurable forms per lifecycle stage (invite, confirm, execute)."
+          href="/admin/forms"
+          ready={true}
         />
         <SectionCard
           title="Messages"
