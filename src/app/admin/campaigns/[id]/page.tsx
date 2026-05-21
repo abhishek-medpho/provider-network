@@ -13,6 +13,8 @@ import {
 import UploadLeads from "../_components/UploadResult";
 import { LaunchButton, RemindersButton } from "../_components/LaunchButtons";
 import RemindersEditor from "../_components/RemindersEditor";
+import Analytics from "../_components/Analytics";
+import { getCampaignAnalytics } from "@/lib/analytics/campaign";
 
 const STATUS_COLORS: Record<string, string> = {
   DRAFT: "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400",
@@ -73,6 +75,9 @@ export default async function CampaignDetailPage({
   ]);
 
   if (!campaign) notFound();
+
+  // Analytics bundle (funnel, reminders, timing, by-source, failures)
+  const analytics = await getCampaignAnalytics(id);
 
   // Member stats
   const statsRaw = await prisma.campaignMember.groupBy({
@@ -168,15 +173,7 @@ export default async function CampaignDetailPage({
         </div>
       </header>
 
-      {/* Funnel */}
-      <section className="grid sm:grid-cols-2 lg:grid-cols-6 gap-3 mb-6">
-        <Stat label="Members" value={campaign._count.members} />
-        <Stat label="Pending" value={stats.PENDING ?? 0} />
-        <Stat label="Sent" value={stats.SENT ?? 0} />
-        <Stat label="Engaged" value={stats.ENGAGED ?? 0} />
-        <Stat label="Submitted" value={stats.SUBMITTED ?? 0} />
-        <Stat label="Messages" value={campaign._count.whatsappMessages} />
-      </section>
+      <Analytics data={analytics} />
 
       {/* Upload */}
       <section className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 mb-6">
