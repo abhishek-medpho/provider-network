@@ -1,6 +1,9 @@
 /**
  * Ultramsg WhatsApp client.
  *
+ * Ported from ClaimOS Backend's `ultraMsg.service.ts` and adapted for our
+ * needs (text-first, with image/document support if we need it later).
+ *
  * Ultramsg is an unofficial WhatsApp gateway that bridges WA Web on a phone
  * number you own. Trade-offs vs. an official BSP (WATI/AiSensy/Interakt):
  *   - No template approvals; can send plain text + media freely
@@ -13,75 +16,161 @@
  * Docs: https://docs.ultramsg.com/
  */
 
-const BASE_URL =
-  process.env.ULTRAMSG_BASE_URL ?? "https://api.ultramsg.com";
+const BASE_URL = "https://api.ultramsg.com";
 const INSTANCE_ID = process.env.ULTRAMSG_INSTANCE_ID;
 const TOKEN = process.env.ULTRAMSG_TOKEN;
+
+const instanceUrl = () => `${BASE_URL}/${INSTANCE_ID}`;
 
 export type UltramsgSendResult =
   | { ok: true; messageId: string; raw: unknown }
   | { ok: false; error: string; raw?: unknown };
 
+function hasCreds(): boolean {
+  return Boolean(INSTANCE_ID && TOKEN);
+}
+
 /**
- * Send a plain WhatsApp text message via Ultramsg.
+ * Format Ultramsg / fetch errors into a single concise line.
+ * Mirrors the ClaimOS service's formatError — surfaces the
+ * subscription-stopped case specifically since it's the most common
+ * "why isn't WA sending?" cause.
+ */
+function formatError(context: string, status: number, data: unknown): string {
+  const apiError =
+    (data as { error?: string; message?: string } | null)?.error ??
+    (data as { error?: string; message?: string } | null)?.message ??
+    null;
+
+  if (
+    apiError &&
+    typeof apiError === "string" &&
+    apiError.toLowerCase().includes("non-payment")
+  ) {
+    return `Ultramsg ${context}: instance stopped due to non-payment. Renew the subscription at https://ultramsg.com.`;
+  }
+  if (apiError) {
+    return `Ultramsg ${context}: [${status}] ${apiError}`;
+  }
+  return `Ultramsg ${context}: HTTP ${status}`;
+}
+
+async function ultramsgPost(
+  endpoint: "messages/chat" | "messages/image" | "messages/document",
+  params: Record<string, string>,
+  context: string,
+): Promise<UltramsgSendResult> {
+  if (!hasCreds()) {
+    // Dev fallback: log instead of sending. Lets you build without creds.
+    if (process.env.NODE_ENV !== "production") {
+      console.warn(
+        `[ultramsg] credentials missing — logging ${context} instead of sending`,
+      );
+      console.log(`[ultramsg dry-run ${endpoint}]`, params);
+      return { ok: true, messageId: "dry-run", raw: { dryRun: true } };
+    }
+    return {
+      ok: false,
+      error: "ULTRAMSG_INSTANCE_ID/TOKEN not configured",
+    };
+  }
+
+  const url = `${instanceUrl()}/${endpoint}`;
+  const body = new URLSearchParams({ token: TOKEN!, ...params });
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    });
+    const data = (await res.json().catch(() => ({}))) as Record<
+      string,
+      unknown
+    >;
+
+    if (
+      !res.ok ||
+      (data as { error?: string }).error ||
+      (data as { sent?: string }).sent === "false"
+    ) {
+      return {
+        ok: false,
+        error: formatError(context, res.status, data),
+        raw: data,
+      };
+    }
+
+    const id =
+      (data as { id?: string | number }).id ??
+      (data as { message?: { id?: string } }).message?.id ??
+      "";
+    return { ok: true, messageId: String(id), raw: data };
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Ultramsg ${context}: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+/**
+ * Send a plain WhatsApp text message.
  * `to` must already be normalized (digits + country code, no plus).
  */
 export async function sendWhatsAppText(
   to: string,
   body: string,
 ): Promise<UltramsgSendResult> {
-  if (!INSTANCE_ID || !TOKEN) {
-    // Dev fallback: log instead of sending. Lets you build without creds.
-    if (process.env.NODE_ENV !== "production") {
-      console.warn(
-        "[ultramsg] credentials missing — logging message instead of sending",
-      );
-      console.log("[ultramsg dry-run]", { to, body });
-      return { ok: true, messageId: "dry-run", raw: { dryRun: true } };
-    }
-    return { ok: false, error: "ULTRAMSG_INSTANCE_ID/TOKEN not configured" };
-  }
+  return ultramsgPost("messages/chat", { to, body }, "text");
+}
 
-  const url = `${BASE_URL}/${INSTANCE_ID}/messages/chat`;
-  const params = new URLSearchParams({
-    token: TOKEN,
-    to,
-    body,
-    // priority: "10",
-  });
+/**
+ * Send a WhatsApp image with optional caption. `imageUrl` must be publicly
+ * reachable by Ultramsg's servers.
+ */
+export async function sendWhatsAppImage(
+  to: string,
+  imageUrl: string,
+  caption = "",
+): Promise<UltramsgSendResult> {
+  return ultramsgPost(
+    "messages/image",
+    { to, image: imageUrl, caption },
+    "image",
+  );
+}
 
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
-    });
-    const data = (await res.json().catch(() => ({}))) as {
-      sent?: string;
-      id?: string | number;
-      message?: string;
-      error?: string;
-    };
+/**
+ * Send a WhatsApp document (PDF etc.). `documentUrl` must be publicly
+ * reachable by Ultramsg's servers.
+ */
+export async function sendWhatsAppDocument(
+  to: string,
+  documentUrl: string,
+  filename = "document.pdf",
+  caption = "",
+): Promise<UltramsgSendResult> {
+  return ultramsgPost(
+    "messages/document",
+    { to, document: documentUrl, filename, caption },
+    "document",
+  );
+}
 
-    if (!res.ok || data.error || data.sent === "false") {
-      return {
-        ok: false,
-        error: data.error || data.message || `HTTP ${res.status}`,
-        raw: data,
-      };
-    }
-
-    return {
-      ok: true,
-      messageId: String(data.id ?? ""),
-      raw: data,
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
+/**
+ * Smart sender — picks image vs document based on the filename extension.
+ */
+export async function sendWhatsAppMedia(
+  to: string,
+  fileUrl: string,
+  filename: string,
+  caption = "",
+): Promise<UltramsgSendResult> {
+  const isPdf = filename.toLowerCase().endsWith(".pdf");
+  return isPdf
+    ? sendWhatsAppDocument(to, fileUrl, filename, caption)
+    : sendWhatsAppImage(to, fileUrl, caption);
 }
 
 /**
@@ -104,6 +193,6 @@ export async function sendWhatsAppLoginLink(
 
   const result = await sendWhatsAppText(toPhone, body);
   if (!result.ok) {
-    throw new Error(`WhatsApp send failed: ${result.error}`);
+    throw new Error(result.error);
   }
 }

@@ -7,6 +7,7 @@
  * Run: npm run db:seed
  */
 import { PrismaClient, AttributeType, PiiLevel } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
@@ -1164,23 +1165,49 @@ async function main() {
     });
   }
 
-  // 4) Bootstrap admin from ADMIN_ALLOWED_PHONES
-  const allowed = (process.env.ADMIN_ALLOWED_PHONES ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (allowed.length) {
-    console.log(`  • Bootstrapping ${allowed.length} admin user(s)`);
-    for (const phone of allowed) {
-      await prisma.user.upsert({
-        where: { phone },
-        update: {},
-        create: { phone, role: "SUPER_ADMIN", active: true },
+  // 4) Bootstrap super admin from ADMIN_EMAIL + ADMIN_PASSWORD
+  const adminEmail = (process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
+  const adminPassword = process.env.ADMIN_PASSWORD ?? "";
+  const adminName = process.env.ADMIN_NAME ?? null;
+  if (adminEmail && adminPassword) {
+    const passwordHash = await bcrypt.hash(adminPassword, 10);
+    const existing = await prisma.user.findUnique({
+      where: { email: adminEmail },
+    });
+    if (existing) {
+      // Only refresh password if env was changed; otherwise leave it alone
+      // so re-running seed doesn't reset a password the admin already changed.
+      const passwordChanged = !(await bcrypt.compare(
+        adminPassword,
+        existing.passwordHash,
+      ));
+      await prisma.user.update({
+        where: { email: adminEmail },
+        data: {
+          role: "SUPER_ADMIN",
+          active: true,
+          name: adminName ?? existing.name,
+          ...(passwordChanged ? { passwordHash } : {}),
+        },
       });
+      console.log(
+        `  • Bootstrap admin: ${adminEmail} (existing user updated${passwordChanged ? ", password reset from env" : ""})`,
+      );
+    } else {
+      await prisma.user.create({
+        data: {
+          email: adminEmail,
+          passwordHash,
+          name: adminName,
+          role: "SUPER_ADMIN",
+          active: true,
+        },
+      });
+      console.log(`  • Bootstrap admin: ${adminEmail} (created)`);
     }
   } else {
     console.log(
-      "  • No ADMIN_ALLOWED_PHONES set — first admin login will create a SUPER_ADMIN automatically (see auth.ts)",
+      "  • No ADMIN_EMAIL / ADMIN_PASSWORD in env — skipping admin bootstrap",
     );
   }
 

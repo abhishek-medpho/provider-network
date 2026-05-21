@@ -1,5 +1,7 @@
 import { signIn } from "@/lib/auth";
 import Link from "next/link";
+import { AuthError } from "next-auth";
+import { redirect } from "next/navigation";
 
 type SearchParams = Promise<{ error?: string; next?: string }>;
 
@@ -12,13 +14,24 @@ export default async function LoginPage({
 
   async function handleLogin(formData: FormData) {
     "use server";
-    const phone = String(formData.get("phone") ?? "");
+    const email = String(formData.get("email") ?? "").trim();
+    const password = String(formData.get("password") ?? "");
     const callbackUrl = String(formData.get("next") ?? "/admin");
 
-    await signIn("whatsapp", {
-      email: phone, // NextAuth's identifier; our normalizer turns it into a phone
-      redirectTo: callbackUrl,
-    });
+    try {
+      await signIn("credentials", {
+        email,
+        password,
+        redirectTo: callbackUrl,
+      });
+    } catch (err) {
+      if (err instanceof AuthError) {
+        redirect(
+          `/login?error=${encodeURIComponent("Invalid email or password")}&next=${encodeURIComponent(callbackUrl)}`,
+        );
+      }
+      throw err;
+    }
   }
 
   return (
@@ -35,7 +48,7 @@ export default async function LoginPage({
           Admin sign in
         </h1>
         <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-8">
-          We&apos;ll send a login link to your WhatsApp.
+          Sign in with your admin credentials.
         </p>
 
         {error && (
@@ -47,24 +60,37 @@ export default async function LoginPage({
         <form action={handleLogin} className="space-y-4">
           <div>
             <label
-              htmlFor="phone"
+              htmlFor="email"
               className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5"
             >
-              WhatsApp number
+              Email
             </label>
             <input
-              id="phone"
-              name="phone"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="email"
               required
-              placeholder="98765 43210"
+              placeholder="you@company.com"
               className="w-full px-3 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100"
             />
-            <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-              Indian numbers — 10 digits without the +91.
-            </p>
+          </div>
+
+          <div>
+            <label
+              htmlFor="password"
+              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5"
+            >
+              Password
+            </label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              className="w-full px-3 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100"
+            />
           </div>
 
           <input type="hidden" name="next" value={next ?? "/admin"} />
@@ -73,13 +99,9 @@ export default async function LoginPage({
             type="submit"
             className="w-full px-4 py-2 rounded-md bg-zinc-900 dark:bg-zinc-50 text-white dark:text-zinc-900 font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors"
           >
-            Send WhatsApp login link
+            Sign in
           </button>
         </form>
-
-        <p className="mt-8 text-xs text-zinc-500 dark:text-zinc-400 text-center">
-          Only authorized admin numbers can sign in.
-        </p>
       </div>
     </div>
   );

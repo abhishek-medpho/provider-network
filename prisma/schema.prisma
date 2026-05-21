@@ -472,12 +472,15 @@ model IncomingMessage {
 // AUTH (NextAuth v5 with WhatsApp magic link)
 // ============================================================================
 
-/// Admin user. Identified by phone (for WhatsApp login).
+/// Admin user. Email + password authentication.
+/// (Care providers don't have User rows — they're identified via
+/// tokenized form URLs against CampaignMember.token.)
 model User {
   id            String     @id @default(cuid())
-  phone         String     @unique
+  email         String     @unique
+  passwordHash  String
   name          String?
-  email         String?    @unique
+  phone         String?    @unique // optional; for ops contact, not auth
   emailVerified DateTime?
   image         String?
   role          AdminRole  @default(VIEWER)
