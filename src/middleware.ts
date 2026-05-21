@@ -10,7 +10,9 @@ export default auth((req) => {
     pathname.startsWith("/api/auth");
 
   const isPublicFormRoute =
-    pathname.startsWith("/onboard") || pathname.startsWith("/api/public");
+    pathname.startsWith("/onboard") ||
+    pathname.startsWith("/api/public") ||
+    pathname.startsWith("/uploads");
 
   const isAdminRoute =
     pathname.startsWith("/admin") || pathname.startsWith("/api/admin");

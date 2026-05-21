@@ -35,11 +35,13 @@ export function renderSection({
   attrById,
   values,
   context,
+  lockedAttributeKeys,
 }: {
   section: FormSection;
   attrById: Map<string, Attribute>;
   values: Record<string, unknown>;
   context: Record<string, unknown>;
+  lockedAttributeKeys?: Set<string>;
 }) {
   return (
     <section
@@ -54,7 +56,15 @@ export function renderSection({
       </header>
       <div className="space-y-4">
         {section.blocks.map((block, i) => (
-          <div key={i}>{renderBlock({ block, attrById, values, context })}</div>
+          <div key={i}>
+            {renderBlock({
+              block,
+              attrById,
+              values,
+              context,
+              lockedAttributeKeys,
+            })}
+          </div>
         ))}
       </div>
     </section>
@@ -66,11 +76,13 @@ function renderBlock({
   attrById,
   values,
   context,
+  lockedAttributeKeys,
 }: {
   block: FormBlock;
   attrById: Map<string, Attribute>;
   values: Record<string, unknown>;
   context: Record<string, unknown>;
+  lockedAttributeKeys?: Set<string>;
 }) {
   switch (block.type) {
     case "INFO":
@@ -110,7 +122,12 @@ function renderBlock({
           </div>
         );
       }
-      return renderAttributeInput({ attr, block, values });
+      return renderAttributeInput({
+        attr,
+        block,
+        values,
+        locked: lockedAttributeKeys?.has(attr.key) ?? false,
+      });
     }
   }
 }
@@ -119,10 +136,12 @@ function renderAttributeInput({
   attr,
   block,
   values,
+  locked,
 }: {
   attr: Attribute;
   block: Extract<FormBlock, { type: "ATTRIBUTE" }>;
   values: Record<string, unknown>;
+  locked: boolean;
 }) {
   const label = block.overrideLabel || attr.label;
   const helpText = block.overrideHelpText ?? attr.helpText;
@@ -147,8 +166,17 @@ function renderAttributeInput({
     <p className="mt-1 text-xs text-zinc-500">{helpText}</p>
   ) : null;
 
+  const lockedHelp = locked ? (
+    <p className="mt-1 text-xs text-zinc-500 italic">
+      Locked — this is how we reach you. Contact us if it&apos;s wrong.
+    </p>
+  ) : null;
+
   const baseInputClass =
     "w-full px-3 py-2.5 rounded-lg border border-zinc-300 bg-white text-base focus:outline-none focus:ring-2 focus:ring-zinc-900";
+
+  const lockedInputClass =
+    "w-full px-3 py-2.5 rounded-lg border border-zinc-200 bg-zinc-50 text-base text-zinc-600 cursor-not-allowed";
 
   switch (attr.type) {
     case "TEXT":
@@ -234,9 +262,11 @@ function renderAttributeInput({
             required={required}
             defaultValue={valueStr}
             pattern="[0-9 +\-()]{7,15}"
-            className={baseInputClass}
+            readOnly={locked}
+            tabIndex={locked ? -1 : undefined}
+            className={locked ? lockedInputClass : baseInputClass}
           />
-          {helpEl}
+          {locked ? lockedHelp : helpEl}
         </div>
       );
     case "PINCODE":
@@ -408,18 +438,68 @@ function renderAttributeInput({
       );
     case "SELFIE":
     case "FILE_IMAGE":
-    case "FILE_DOC":
+    case "FILE_DOC": {
+      const isSelfie = attr.type === "SELFIE";
+      const isDoc = attr.type === "FILE_DOC";
+      const accept = isDoc ? "application/pdf,image/*" : "image/*";
+      const capture = isSelfie ? "user" : "environment";
+      const existing = (() => {
+        const v = values[attr.key];
+        if (v && typeof v === "object" && "url" in v) {
+          return v as { url: string; originalName?: string };
+        }
+        return null;
+      })();
       return (
         <div>
           {labelEl}
-          <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 px-3 py-4 text-center">
-            <p className="text-xs text-zinc-500">
-              File uploads will be enabled soon.
-            </p>
-          </div>
+          {existing && (
+            <div className="mb-2 rounded-lg border border-zinc-200 bg-white p-2 flex items-center gap-3">
+              {!isDoc ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={existing.url}
+                  alt={existing.originalName ?? "Uploaded"}
+                  className="w-16 h-16 rounded-md object-cover bg-zinc-100"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-md bg-zinc-100 flex items-center justify-center text-2xl">
+                  📄
+                </div>
+              )}
+              <div className="text-xs text-zinc-700">
+                <div className="font-medium">Already uploaded</div>
+                <div className="text-zinc-500">
+                  {existing.originalName ?? "—"}
+                </div>
+                <div className="text-zinc-500 mt-0.5">
+                  Pick a new file below to replace.
+                </div>
+              </div>
+            </div>
+          )}
+          <label className="block">
+            <input
+              id={attr.key}
+              name={attr.key}
+              type="file"
+              accept={accept}
+              capture={!isDoc ? capture : undefined}
+              required={required && !existing}
+              className="block w-full text-sm file:mr-3 file:px-4 file:py-2.5 file:rounded-lg file:border-0 file:bg-zinc-900 file:text-white file:text-sm file:font-medium hover:file:bg-zinc-800"
+            />
+          </label>
+          <p className="mt-1 text-xs text-zinc-500">
+            {isSelfie
+              ? "Opens your front camera"
+              : isDoc
+                ? "PDF or photo of the document"
+                : "Opens your camera"}
+          </p>
           {helpEl}
         </div>
       );
+    }
     case "SECTION_HEADING":
       return (
         <h3 className="text-base font-semibold text-zinc-900 pt-2">{label}</h3>

@@ -4,7 +4,8 @@ import { prisma } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Attribute, AttributeType, Prisma } from "@prisma/client";
-import type { FormBlock, FormSection } from "@/lib/types/form";
+import type { FormSection } from "@/lib/types/form";
+import { saveLocalFile } from "@/lib/storage";
 
 type AttributeOption = { value: string; label: string };
 
@@ -208,12 +209,47 @@ export async function submitOnboarding(token: string, formData: FormData) {
         attr.type === "FILE_IMAGE" ||
         attr.type === "FILE_DOC";
 
+      // File types: save uploaded file, store { key, url, ... } in attributes.
+      if (isFileType) {
+        const f = raw.find(
+          (r): r is File => typeof r !== "string" && r instanceof File,
+        );
+        const existing = (member.careProvider.attributes as Record<string, unknown>)?.[
+          attr.key
+        ];
+
+        // No new file picked
+        if (!f || f.size === 0) {
+          if (existing) {
+            // keep existing
+            collected[attr.key] = existing;
+          } else if (required) {
+            errors[attr.key] = "required";
+          }
+          continue;
+        }
+
+        try {
+          const kind: "image" | "document" =
+            attr.type === "FILE_DOC" ? "document" : "image";
+          const saved = await saveLocalFile(f, {
+            careProviderId: member.careProviderId,
+            kind,
+          });
+          collected[attr.key] = saved;
+        } catch (err) {
+          errors[attr.key] =
+            err instanceof Error ? err.message : "upload failed";
+        }
+        continue;
+      }
+
       // For BOOLEAN, unchecked checkbox sends nothing — treat as false
       const effectiveRaw =
         attr.type === "BOOLEAN" && raw.length === 0 ? ["false"] : raw;
 
       const { value, error } = coerce(
-        { ...attr, validation: { ...getValidation(attr), required: required && !isFileType } } as Attribute,
+        { ...attr, validation: { ...getValidation(attr), required } } as Attribute,
         effectiveRaw,
       );
 
@@ -250,6 +286,12 @@ export async function submitOnboarding(token: string, formData: FormData) {
     systemUpdates.email = collected.email;
   if (typeof collected.pincode_home === "string")
     systemUpdates.pincodeHome = collected.pincode_home;
+  const selfieVal = collected.selfie as
+    | { url?: string }
+    | string
+    | undefined;
+  if (selfieVal && typeof selfieVal === "object" && selfieVal.url)
+    systemUpdates.selfieUrl = selfieVal.url;
 
   await prisma.$transaction([
     prisma.careProvider.update({

@@ -78,8 +78,29 @@ export default async function OnboardPage({
   });
   const attrById = new Map(attrs.map((a) => [a.id, a]));
 
-  const values =
+  // Pre-fill values: merge system fields from CareProvider with the
+  // attribute JSON. CSV-imported leads have name/phone/email set on the
+  // CareProvider record before the form ever opens.
+  const cp = await prisma.careProvider.findUnique({
+    where: { id: member.careProvider.id },
+    select: { name: true, phone: true, email: true, pincodeHome: true },
+  });
+  const attrValues =
     (member.careProvider.attributes as Record<string, unknown>) ?? {};
+  const values: Record<string, unknown> = {
+    ...(cp?.name && !attrValues.full_name ? { full_name: cp.name } : {}),
+    ...(cp?.phone && !attrValues.phone ? { phone: cp.phone } : {}),
+    ...(cp?.email && !attrValues.email ? { email: cp.email } : {}),
+    ...(cp?.pincodeHome && !attrValues.pincode_home
+      ? { pincode_home: cp.pincodeHome }
+      : {}),
+    ...attrValues,
+  };
+
+  // Attribute keys that must not be edited by the provider (we use phone as
+  // their identity; changing it would break the token mapping).
+  const lockedAttributeKeys = new Set<string>(["phone"]);
+
   const context = {}; // onboarding has no patient/appointment context
 
   async function action(formData: FormData) {
@@ -123,7 +144,13 @@ export default async function OnboardPage({
 
       <form action={action} className="space-y-4">
         {sections.map((section) =>
-          renderSection({ section, attrById, values, context }),
+          renderSection({
+            section,
+            attrById,
+            values,
+            context,
+            lockedAttributeKeys,
+          }),
         )}
 
         <div className="pt-2 pb-10 flex flex-col gap-2 sm:flex-row sm:justify-end">

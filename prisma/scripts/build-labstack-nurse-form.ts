@@ -53,10 +53,11 @@ const STRUCTURE: { key: string; title: string; description?: string; attributeKe
   {
     key: "where",
     title: "Where you can work",
+    description:
+      "We match you to nearby jobs based on your home pincode and travel radius.",
     attributeKeys: [
       "pincode_home",
-      "pincodes_serviceable",
-      "travel_distance",
+      "service_radius_km",
       "transport_mode",
     ],
   },
@@ -89,6 +90,13 @@ const STRUCTURE: { key: string; title: string; description?: string; attributeKe
       "emergency_contact_phone",
       "emergency_contact_relation",
     ],
+  },
+  {
+    key: "verification",
+    title: "Verification",
+    description:
+      "Documents stay private and are only seen by our verification team.",
+    attributeKeys: ["aadhaar_front", "aadhaar_back", "qualification_cert"],
   },
 ];
 

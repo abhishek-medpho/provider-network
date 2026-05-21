@@ -88,8 +88,9 @@ export default async function FormPreviewPage({
           renderSection({
             section,
             attrById,
-            values: {},
+            values: { full_name: "Saini Pal", phone: "919876543210" },
             context: sampleContext,
+            lockedAttributeKeys: new Set(["phone"]),
           }),
         )}
 

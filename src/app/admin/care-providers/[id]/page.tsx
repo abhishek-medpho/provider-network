@@ -438,6 +438,10 @@ function formatValue(
   if (value === null || value === undefined || value === "")
     return <span className="text-zinc-400">—</span>;
 
+  if (type === "SELFIE" || type === "FILE_IMAGE" || type === "FILE_DOC") {
+    return <FileValue value={value} type={type} />;
+  }
+
   if (type === "SINGLE_SELECT") {
     const opts = Array.isArray(options) ? (options as Option[]) : [];
     const found = opts.find((o) => o.value === value);
@@ -469,4 +473,37 @@ function formatValue(
     return String(value);
   }
   return String(value);
+}
+
+function FileValue({ value, type }: { value: unknown; type: string }) {
+  if (!value || typeof value !== "object") {
+    return <span className="text-zinc-400">—</span>;
+  }
+  const v = value as { url?: string; originalName?: string; mimeType?: string };
+  if (!v.url) return <span className="text-zinc-400">—</span>;
+
+  const isPdf = (v.mimeType ?? "").includes("pdf");
+  if (isPdf || type === "FILE_DOC") {
+    return (
+      <a
+        href={v.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800"
+      >
+        📄 {v.originalName ?? "Document"} ↗
+      </a>
+    );
+  }
+  // Image
+  return (
+    <a href={v.url} target="_blank" rel="noopener noreferrer" className="block">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={v.url}
+        alt={v.originalName ?? "Uploaded image"}
+        className="w-32 h-32 rounded-md object-cover bg-zinc-100 border border-zinc-200 dark:border-zinc-800 hover:opacity-90"
+      />
+    </a>
+  );
 }
