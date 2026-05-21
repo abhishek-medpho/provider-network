@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cpp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cpp
+      POSTGRES_PASSWORD: cpp_dev_password
+      POSTGRES_DB: care_provider_platform
+    ports:
+      - "5434:5432"
+    volumes:
+      - cpp_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cpp -d care_provider_platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  cpp_pg_data:

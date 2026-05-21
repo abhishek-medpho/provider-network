@@ -1,0 +1,530 @@
+// Care Provider Platform — Prisma schema
+//
+// Six core entities:
+//   Attribute       — typed atomic data points (with validation + options)
+//   ProfileType     — bundles of attributes per role (NURSE, PHLEBO, GDA, ...)
+//   FormTemplate    — a published rendering of a ProfileType (sections, layout)
+//   MessageTemplate — WhatsApp copy with merge tags
+//   Campaign        — orchestrates a CSV batch → invite → form → reminders
+//   CareProvider    — canonical onboarded entity, phone as natural key
+//
+// Plus operational tables: LeadBatch, CampaignMember, CareProviderEvent,
+// WhatsAppMessage, IncomingMessage, and NextAuth's (User, Account, Session,
+// VerificationToken, AdminAuthOtp).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum AttributeType {
+  TEXT
+  LONG_TEXT
+  NUMBER
+  EMAIL
+  PHONE
+  PINCODE
+  DATE
+  YEAR
+  SINGLE_SELECT
+  MULTI_SELECT
+  BOOLEAN
+  FILE_IMAGE
+  FILE_DOC
+  SELFIE
+  OTP_VERIFIED_PHONE
+  RICH_TEXT
+  SECTION_HEADING
+  INFO_BLOCK
+}
+
+enum PiiLevel {
+  NONE
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum CareProviderStatus {
+  LEAD                  // imported / no form action yet
+  ENGAGED               // opened the form link
+  PROFILED              // completed primary onboarding form
+  PENDING_VERIFICATION  // documents submitted, awaiting review
+  VERIFIED              // documents verified by admin
+  ACTIVE                // available to receive orders
+  PAUSED                // temporarily unavailable
+  BLOCKED               // permanently disabled
+  OPTED_OUT             // requested no contact
+  REJECTED              // failed verification
+}
+
+enum CampaignStatus {
+  DRAFT
+  RUNNING
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+enum MessageChannel {
+  WHATSAPP
+  SMS
+  EMAIL
+}
+
+enum MessageTemplateKind {
+  INVITE
+  REMINDER
+  CONFIRMATION
+  REJECTION
+  ACTIVATION
+  CUSTOM
+}
+
+enum WhatsAppMessageStatus {
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum CampaignMemberStatus {
+  PENDING
+  SENT
+  ENGAGED      // form opened
+  SUBMITTED    // form submitted
+  COMPLETED    // all submission parts done
+  OPTED_OUT
+  FAILED
+}
+
+enum FormTemplateStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  OPS
+  VIEWER
+}
+
+// ============================================================================
+// ATTRIBUTES & PROFILE TYPES
+// ============================================================================
+
+/// An atomic data point. Both system attributes (phone, name, status) and
+/// custom attributes (skill list, expected rate) live here. System attributes
+/// back real columns on CareProvider; custom attributes flow into the
+/// CareProvider.attributes JSON column.
+model Attribute {
+  id              String          @id @default(cuid())
+  key             String          @unique // snake_case identifier
+  label           String
+  labelLocalized  Json?           // { en, hi, kn, ta, te }
+  helpText        String?
+  helpTextLocalized Json?
+  type            AttributeType
+  options         Json?           // [{ value, label, labelLocalized }] for SELECT types
+  validation      Json?           // { required, min, max, regex, fileMaxKb, ... }
+  piiLevel        PiiLevel        @default(NONE)
+  isSearchable    Boolean         @default(false)
+  isSystem        Boolean         @default(false) // system attrs cannot be deleted
+  category        String?         // optional grouping ("personal", "skills", "commercials")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  archivedAt      DateTime?
+
+  profileTypeAttrs ProfileTypeAttribute[]
+
+  @@index([key])
+  @@index([archivedAt])
+}
+
+/// A role definition. Bundles attributes + role-level config flags.
+model ProfileType {
+  id                    String   @id @default(cuid())
+  code                  String   @unique // "NURSE", "PHLEBO", ...
+  label                 String
+  labelLocalized        Json?
+  description           String?
+  icon                  String?
+  color                 String?
+  requiresCouncilReg    Boolean  @default(false)
+  requiresQualCert      Boolean  @default(false)
+  sortOrder             Int      @default(0)
+  active                Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  attributes            ProfileTypeAttribute[]
+  formTemplates         FormTemplate[]
+  campaigns             Campaign[]
+  careProviders         CareProvider[]
+  messageTemplates      MessageTemplate[]
+
+  @@index([active])
+}
+
+/// Join: ProfileType ↔ Attribute, with per-binding config (required, order,
+/// section, conditional logic).
+model ProfileTypeAttribute {
+  id              String      @id @default(cuid())
+  profileTypeId   String
+  attributeId     String
+  isRequired      Boolean     @default(false)
+  sortOrder       Int         @default(0)
+  sectionKey      String?     // group attributes into sections (e.g. "basics", "skills")
+  conditionalLogic Json?      // { showIf: { attributeKey, in: [...] } }
+
+  profileType     ProfileType @relation(fields: [profileTypeId], references: [id], onDelete: Cascade)
+  attribute       Attribute   @relation(fields: [attributeId], references: [id])
+
+  @@unique([profileTypeId, attributeId])
+  @@index([profileTypeId])
+}
+
+// ============================================================================
+// FORM TEMPLATES
+// ============================================================================
+
+/// A renderable view of a ProfileType. Versioned — publishing creates an
+/// immutable version. MVP can auto-generate a default form from ProfileType
+/// attributes; this table stores explicitly-designed alternatives.
+model FormTemplate {
+  id              String              @id @default(cuid())
+  name            String
+  profileTypeId   String
+  layout          String              @default("ONE_PER_SCREEN") // ONE_PER_SCREEN | MULTI_PAGE | SINGLE_PAGE
+  sections        Json                // [{ key, title, titleLocalized, attributeIds: [...] }]
+  submitParts     Json?               // [{ partKey, sectionKeys, statusOnSubmit, nextMessageTemplateId }]
+  themeId         String?
+  status          FormTemplateStatus  @default(DRAFT)
+  version         Int                 @default(1)
+  publishedAt     DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  archivedAt      DateTime?
+
+  profileType     ProfileType         @relation(fields: [profileTypeId], references: [id])
+  campaigns       Campaign[]
+
+  @@index([profileTypeId, status])
+}
+
+// ============================================================================
+// MESSAGE TEMPLATES
+// ============================================================================
+
+/// WhatsApp / SMS / Email copy with merge tags. One row per
+/// (template, channel, language) so localized variants are first-class.
+model MessageTemplate {
+  id            String              @id @default(cuid())
+  code          String              // identifier like "nurse_invite_v1"
+  name          String
+  channel       MessageChannel      @default(WHATSAPP)
+  language      String              @default("en") // ISO code
+  kind          MessageTemplateKind @default(INVITE)
+  body          String              // template body with {{merge_tags}}
+  attachments   Json?               // [{ type, url, caption }]
+  cta           Json?               // { type: LINK, label, urlPattern }
+  variables     String[]            // declared merge tags for validation
+  profileTypeId String?             // optionally scoped to a role
+  active        Boolean             @default(true)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  profileType   ProfileType?        @relation(fields: [profileTypeId], references: [id])
+
+  inviteForCampaigns   Campaign[] @relation("CampaignInviteTemplate")
+  whatsappMessages     WhatsAppMessage[]
+
+  @@unique([code, language])
+  @@index([profileTypeId, active])
+}
+
+// ============================================================================
+// LEADS, CAMPAIGNS, ENGAGEMENT
+// ============================================================================
+
+/// One row per CSV upload. Tracks who uploaded what, when, and with what
+/// column mapping. Source of truth for "where did this care provider come from".
+model LeadBatch {
+  id              String   @id @default(cuid())
+  name            String
+  source          String?  // "Apna April Drive", "Workindia 2026-05", etc.
+  filename        String
+  uploadedById    String?
+  rowCount        Int      @default(0)
+  newCount        Int      @default(0)  // care providers newly created from this batch
+  matchedCount    Int      @default(0)  // existing care providers enriched
+  columnMapping   Json?    // { csvColumn → attributeKey }
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  uploadedBy      User?    @relation(fields: [uploadedById], references: [id])
+  campaigns       Campaign[]
+  careProviders   CareProvider[]
+}
+
+/// Orchestrates a batch: which leads, which form, which invite,
+/// which reminder rules, throttling, stop conditions.
+model Campaign {
+  id                       String         @id @default(cuid())
+  name                     String
+  profileTypeId            String
+  formTemplateId           String?
+  inviteMessageTemplateId  String?
+  leadBatchId              String?
+
+  /// [{ triggerAfterHours, condition, messageTemplateId, maxSends }]
+  reminderRules            Json?
+  /// e.g. ["status>=VERIFIED", "optedOut=true"]
+  stopConditions           Json?
+  /// { maxSendsPerDay, maxSendsPerProvider }
+  throttle                 Json?
+
+  status                   CampaignStatus @default(DRAFT)
+  startedAt                DateTime?
+  completedAt              DateTime?
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @updatedAt
+
+  profileType              ProfileType        @relation(fields: [profileTypeId], references: [id])
+  formTemplate             FormTemplate?      @relation(fields: [formTemplateId], references: [id])
+  inviteMessageTemplate    MessageTemplate?   @relation("CampaignInviteTemplate", fields: [inviteMessageTemplateId], references: [id])
+  leadBatch                LeadBatch?         @relation(fields: [leadBatchId], references: [id])
+
+  members                  CampaignMember[]
+  whatsappMessages         WhatsAppMessage[]
+
+  @@index([status])
+  @@index([profileTypeId])
+}
+
+/// Join: CareProvider ↔ Campaign. Tracks per-provider state inside a campaign:
+/// how many messages sent, where they are in the funnel, etc.
+model CampaignMember {
+  id              String                @id @default(cuid())
+  campaignId      String
+  careProviderId  String
+  status          CampaignMemberStatus  @default(PENDING)
+  remindersSent   Int                   @default(0)
+  lastSentAt      DateTime?
+  engagedAt       DateTime?
+  submittedAt     DateTime?
+  completedAt     DateTime?
+  optedOutAt      DateTime?
+  /// Unique token used in the form magic-link URL for this (campaign, provider)
+  /// pair. Lets us identify who opened/submitted without a login.
+  token           String                @unique @default(cuid())
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  campaign        Campaign              @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  careProvider    CareProvider          @relation(fields: [careProviderId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, careProviderId])
+  @@index([status])
+  @@index([careProviderId])
+}
+
+// ============================================================================
+// CARE PROVIDERS
+// ============================================================================
+
+/// The canonical onboarded entity. Phone is the natural key — same phone in
+/// two CSV uploads enriches, not duplicates.
+model CareProvider {
+  id                  String              @id @default(cuid())
+  phone               String              @unique // E.164-ish, country-code prefixed, no plus
+  phoneVerifiedAt     DateTime?
+
+  /// Current role this provider is associated with. Null until profile type
+  /// is chosen (typically via the form).
+  profileTypeId       String?
+
+  /// System attributes — real columns
+  name                String?
+  email               String?
+  status              CareProviderStatus  @default(LEAD)
+  source              String?             // free-text label of where they came from
+  language            String              @default("en")
+  pincodeHome         String?
+  selfieUrl           String?
+
+  /// Custom attribute values (defined via Attribute table). JSONB for now;
+  /// schema-flexible. Move to EAV later if analytics demand it.
+  attributes          Json                @default("{}")
+
+  /// Operational metadata
+  lastContactedAt     DateTime?
+  optedOutAt          DateTime?
+  blockedReason       String?
+  leadBatchId         String?
+
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  profileType         ProfileType?        @relation(fields: [profileTypeId], references: [id])
+  leadBatch           LeadBatch?          @relation(fields: [leadBatchId], references: [id])
+  events              CareProviderEvent[]
+  campaignMemberships CampaignMember[]
+  whatsappMessages    WhatsAppMessage[]
+  formResponses       FormResponse[]
+
+  @@index([status])
+  @@index([profileTypeId])
+  @@index([pincodeHome])
+  @@index([phone])
+}
+
+/// Append-only audit log of every meaningful action on a care provider.
+/// Replaces the temptation to scatter "lastFoo" columns everywhere.
+model CareProviderEvent {
+  id              String       @id @default(cuid())
+  careProviderId  String
+  type            String       // "MESSAGE_SENT", "FORM_OPENED", "FORM_SUBMITTED", "STATUS_CHANGED", ...
+  payload         Json?
+  createdAt       DateTime     @default(now())
+
+  careProvider    CareProvider @relation(fields: [careProviderId], references: [id], onDelete: Cascade)
+
+  @@index([careProviderId, createdAt])
+  @@index([type])
+}
+
+/// Raw submission record. One row per form-part submit. Always preserve the
+/// raw payload — even after CareProvider.attributes is updated.
+model FormResponse {
+  id              String       @id @default(cuid())
+  careProviderId  String
+  formTemplateId  String?
+  partKey         String?      // e.g. "part_a", "part_b"
+  data            Json
+  createdAt       DateTime     @default(now())
+
+  careProvider    CareProvider @relation(fields: [careProviderId], references: [id], onDelete: Cascade)
+
+  @@index([careProviderId])
+}
+
+// ============================================================================
+// WHATSAPP MESSAGES (outbound + inbound)
+// ============================================================================
+
+/// Outbound message log — every WA send (invite, reminder, login link, etc.)
+model WhatsAppMessage {
+  id                  String                @id @default(cuid())
+  careProviderId      String?
+  campaignId          String?
+  messageTemplateId   String?
+  toPhone             String
+  body                String
+  attachments         Json?
+  status              WhatsAppMessageStatus @default(QUEUED)
+  ultramsgMessageId   String?
+  errorMessage        String?
+  sentAt              DateTime?
+  deliveredAt         DateTime?
+  readAt              DateTime?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  careProvider        CareProvider?         @relation(fields: [careProviderId], references: [id])
+  campaign            Campaign?             @relation(fields: [campaignId], references: [id])
+  messageTemplate     MessageTemplate?      @relation(fields: [messageTemplateId], references: [id])
+
+  @@index([toPhone])
+  @@index([status])
+  @@index([careProviderId])
+}
+
+/// Inbound message from Ultramsg webhook. Even if we don't show a chat UI in
+/// MVP, store everything — opt-outs and questions land here.
+model IncomingMessage {
+  id              String   @id @default(cuid())
+  fromPhone       String
+  body            String?
+  attachments     Json?
+  ultramsgPayload Json?
+  isOptOut        Boolean  @default(false)
+  handled         Boolean  @default(false)
+  receivedAt      DateTime @default(now())
+
+  @@index([fromPhone])
+  @@index([handled])
+}
+
+// ============================================================================
+// AUTH (NextAuth v5 with WhatsApp magic link)
+// ============================================================================
+
+/// Admin user. Identified by phone (for WhatsApp login).
+model User {
+  id            String     @id @default(cuid())
+  phone         String     @unique
+  name          String?
+  email         String?    @unique
+  emailVerified DateTime?
+  image         String?
+  role          AdminRole  @default(VIEWER)
+  active        Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  lastLoginAt   DateTime?
+
+  accounts      Account[]
+  sessions      Session[]
+  leadBatches   LeadBatch[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// NextAuth verification tokens — used for magic links over WhatsApp.
+/// `identifier` is the phone number (E.164-like, no plus).
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
