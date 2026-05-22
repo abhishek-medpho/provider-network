@@ -73,13 +73,28 @@ export default async function OnboardPage({
   // Already submitted? Show a friendly state.
   if (member.submittedAt) {
     return (
-      <main className="max-w-md mx-auto px-5 py-10">
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center">
-          <h1 className="text-lg font-semibold text-emerald-900">
-            ✓ Profile submitted
+      <main className="max-w-md mx-auto px-5 py-12">
+        <div className="rounded-2xl border border-emerald-200 bg-white p-8 text-center shadow-sm">
+          <div className="size-12 mx-auto rounded-full bg-emerald-50 flex items-center justify-center text-emerald-700 text-2xl mb-3">
+            ✓
+          </div>
+          <h1 className="text-xl font-semibold text-zinc-900">
+            Profile submitted
           </h1>
-          <p className="text-sm text-emerald-800 mt-1">
-            We&apos;ve already received your details. We&apos;ll be in touch.
+          <p className="text-sm text-zinc-600 mt-1.5">
+            We&apos;ve already received your details. Our team will be in touch
+            via WhatsApp.
+          </p>
+          <p className="text-xs text-zinc-500 mt-6">
+            Powered by{" "}
+            <a
+              href="https://www.labstack.in"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-zinc-700 hover:text-zinc-900 underline underline-offset-2"
+            >
+              Labstack
+            </a>
           </p>
         </div>
       </main>
@@ -182,22 +197,42 @@ export default async function OnboardPage({
 
   return (
     <main className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
-      <header className="mb-6 px-1">
-        <h1 className="text-xl font-semibold text-zinc-900">{form.name}</h1>
-        <p className="text-sm text-zinc-600 mt-0.5">
-          {member.campaign.profileType.label} ·{" "}
-          {sections.length} section{sections.length === 1 ? "" : "s"}
+      {/* Brand bar */}
+      <div className="flex items-center justify-between mb-5 px-1">
+        <a
+          href="https://www.labstack.in"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2"
+        >
+          <div className="size-8 rounded-md bg-zinc-900 text-white flex items-center justify-center text-sm font-bold">
+            L
+          </div>
+          <span className="text-sm font-semibold text-zinc-900">Labstack</span>
+        </a>
+        <span className="text-xs text-zinc-500">
+          Step {sections.length > 0 ? "1" : "—"} of {sections.length}
+        </span>
+      </div>
+
+      <header className="mb-5 px-1">
+        <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
+          {form.name}
+        </h1>
+        <p className="text-sm text-zinc-600 mt-1">
+          {member.campaign.profileType.label} · {sections.length} section
+          {sections.length === 1 ? "" : "s"} · takes ~3 min
         </p>
       </header>
 
       {error && (
         <>
           <ScrollToFirstError />
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-            <strong className="block mb-0.5">
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 shadow-sm">
+            <strong className="block mb-1 text-red-900">
               {fieldErrors.size > 0
-                ? `Please fix ${fieldErrors.size} field${fieldErrors.size === 1 ? "" : "s"} below:`
-                : "Couldn't submit:"}
+                ? `Please fix ${fieldErrors.size} field${fieldErrors.size === 1 ? "" : "s"} below`
+                : "We couldn't submit your form"}
             </strong>
             {fieldErrors.size > 0 ? (
               <ul className="mt-1 list-disc list-inside space-y-0.5">
@@ -210,7 +245,7 @@ export default async function OnboardPage({
                     <li key={key}>
                       <a
                         href={`#field-${key}`}
-                        className="underline hover:text-red-900"
+                        className="underline underline-offset-2 hover:text-red-700"
                       >
                         {label}
                       </a>
