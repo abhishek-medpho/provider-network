@@ -32,21 +32,18 @@ ENV HOSTNAME=0.0.0.0
 # Non-root user
 RUN addgroup -g 1001 -S nodejs && adduser -u 1001 -S nextjs -G nodejs
 
-# Standalone server + static assets
+# Full node_modules from builder — guarantees prisma + tsx + transitive deps
+# work without cherry-picking. ~500MB extra but bulletproof.
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
+
+# Standalone server + static assets + schema
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-
-# Prisma artifacts needed at runtime for migrate deploy + seed
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
-# tsx is needed to run prisma/seed.ts
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/tsx ./node_modules/tsx
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.bin/tsx ./node_modules/.bin/tsx
-# Seed reads ts-node-style imports; tsx already covers it. Also bring bcryptjs etc. (already in standalone).
+COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
+# Entrypoint invokes prisma + tsx via their JS entries, not via .bin/* shims —
+# Docker dereferences symlinks, which breaks the prisma CLI's wasm lookup.
 
 # Uploaded files (form attachments) — bind-mounted in compose
 RUN mkdir -p /app/public/uploads && chown -R nextjs:nodejs /app/public/uploads

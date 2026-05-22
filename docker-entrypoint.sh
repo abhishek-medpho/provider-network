@@ -2,11 +2,11 @@
 set -e
 
 echo "[entrypoint] Applying database migrations..."
-node_modules/.bin/prisma migrate deploy
+node node_modules/prisma/build/index.js migrate deploy
 
 if [ "${SEED_ON_BOOT:-true}" = "true" ]; then
   echo "[entrypoint] Running seed (idempotent upserts)..."
-  node_modules/.bin/tsx prisma/seed.ts || {
+  node node_modules/tsx/dist/cli.mjs prisma/seed.ts || {
     echo "[entrypoint] Seed failed — continuing boot."
   }
 else
