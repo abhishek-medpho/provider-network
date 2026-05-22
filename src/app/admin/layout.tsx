@@ -10,6 +10,7 @@ const navItems = [
   { href: "/admin/forms", label: "Forms", icon: "▤" },
   { href: "/admin/messages", label: "Messages", icon: "✉" },
   { href: "/admin/campaigns", label: "Campaigns", icon: "▶" },
+  { href: "/admin/reminders", label: "Reminders", icon: "🔔" },
 ];
 
 export default async function AdminLayout({

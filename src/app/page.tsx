@@ -50,7 +50,7 @@ export default async function Home() {
 
         {session?.user && (
           <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center mt-8">
-            Signed in as {session.user.name ?? session.user.phone} · {session.user.role}
+            Signed in as {session.user.name ?? session.user.email} · {session.user.role}
           </p>
         )}
       </div>

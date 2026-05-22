@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { AttributeType, PiiLevel, type Prisma } from "@prisma/client";
+import { AttributeType, PiiLevel, Prisma } from "@prisma/client";
 
 async function requireAdmin() {
   const session = await auth();

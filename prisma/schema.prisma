@@ -135,6 +135,27 @@ enum AdminRole {
   VIEWER
 }
 
+/// What lifecycle stage a reminder rule targets. The runner uses this to
+/// pick the right audience query.
+enum ReminderKind {
+  CAMPAIGN_FOLLOWUP       // implemented: campaign member hasn't submitted yet
+  VERIFICATION_STUCK      // implemented: PROFILED/PENDING_VERIFICATION too long
+  PROVIDER_INACTIVE       // implemented: ACTIVE provider gone cold
+  APPOINTMENT_PRE         // future: T-N before scheduled appointment
+  APPOINTMENT_PENDING     // future: order assigned but unaccepted
+  APPOINTMENT_POST        // future: post-service form not completed
+  DOCUMENT_EXPIRY         // future: doc expires soon
+  CUSTOM                  // generic: status-filter + cooldown
+}
+
+enum ReminderSendStatus {
+  SCHEDULED
+  SENT
+  FAILED
+  SUPPRESSED              // skipped (opt-out / cooldown / cap hit)
+  CANCELLED
+}
+
 // ============================================================================
 // ATTRIBUTES & PROFILE TYPES
 // ============================================================================
@@ -279,6 +300,7 @@ model MessageTemplate {
 
   inviteForCampaigns   Campaign[] @relation("CampaignInviteTemplate")
   whatsappMessages     WhatsAppMessage[]
+  reminderRules        ReminderRule[]
 
   @@unique([code, language])
   @@index([profileTypeId, active])
@@ -338,6 +360,7 @@ model Campaign {
 
   members                  CampaignMember[]
   whatsappMessages         WhatsAppMessage[]
+  reminderRuleItems        ReminderRule[]   @relation("CampaignReminderRules")
 
   @@index([status])
   @@index([profileTypeId])
@@ -364,6 +387,7 @@ model CampaignMember {
 
   campaign        Campaign              @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   careProvider    CareProvider          @relation(fields: [careProviderId], references: [id], onDelete: Cascade)
+  reminderLogs    ReminderLog[]
 
   @@unique([campaignId, careProviderId])
   @@index([status])
@@ -413,6 +437,7 @@ model CareProvider {
   campaignMemberships CampaignMember[]
   whatsappMessages    WhatsAppMessage[]
   formResponses       FormResponse[]
+  reminderLogs        ReminderLog[]
 
   @@index([status])
   @@index([profileTypeId])
@@ -559,4 +584,86 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+// ============================================================================
+// REMINDER RULES + LOGS
+// ============================================================================
+
+/// A configured, named rule that the reminder runner evaluates on each tick.
+/// Rules can be campaign-scoped (CAMPAIGN_FOLLOWUP) or global (VERIFICATION_STUCK,
+/// PROVIDER_INACTIVE). The runner queries the right audience for each kind,
+/// checks cooldowns + caps, and schedules ReminderLog rows.
+model ReminderRule {
+  id                  String       @id @default(cuid())
+  name                String
+  description         String?
+  kind                ReminderKind
+
+  /// Optional campaign scope. Required for CAMPAIGN_FOLLOWUP; null for global kinds.
+  campaignId          String?
+
+  /// WhatsApp/SMS template to send. Null means use a hardcoded fallback body.
+  messageTemplateId   String?
+
+  /// Hours after the trigger event before sending (e.g. 24 = 1 day after
+  /// PENDING with no submission). Decimal allowed (0.5 = 30 min).
+  delayHours          Float        @default(24)
+
+  /// Minimum hours between two sends of this rule to the same provider.
+  cooldownHours       Float        @default(72)
+
+  /// Hard cap on how many times this rule fires per care provider (0 = unlimited).
+  maxSendsPerProvider Int          @default(3)
+
+  /// JSON array of CareProviderStatus or CampaignMemberStatus values that the
+  /// target must be in for this rule to fire. Null = no status filter.
+  targetStatuses      Json?        // string[]
+
+  /// Extra rule-specific parameters (e.g. { minDaysSinceLastContact: 30 }).
+  params              Json?
+
+  active              Boolean      @default(true)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  campaign            Campaign?          @relation("CampaignReminderRules", fields: [campaignId], references: [id], onDelete: Cascade)
+  messageTemplate     MessageTemplate?   @relation(fields: [messageTemplateId], references: [id])
+  logs                ReminderLog[]
+
+  @@index([kind, active])
+  @@index([campaignId])
+}
+
+/// One row per reminder attempt — whether scheduled, sent, failed, or suppressed.
+/// The runner writes a SCHEDULED row, then the sender updates it to SENT/FAILED.
+/// Suppressed rows explain why a send was skipped (cooldown, cap, opt-out).
+model ReminderLog {
+  id                String             @id @default(cuid())
+  reminderRuleId    String
+  careProviderId    String
+
+  /// Set for CAMPAIGN_FOLLOWUP rules where the member row is the unit of work.
+  campaignMemberId  String?
+
+  status            ReminderSendStatus @default(SCHEDULED)
+  scheduledFor      DateTime           // when the runner intends to send
+  sentAt            DateTime?
+
+  /// FK to the WhatsAppMessage row that was created on send.
+  whatsappMessageId String?            @unique
+
+  /// Human-readable reason when status is FAILED or SUPPRESSED.
+  reason            String?
+
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  reminderRule      ReminderRule    @relation(fields: [reminderRuleId], references: [id], onDelete: Cascade)
+  careProvider      CareProvider    @relation(fields: [careProviderId], references: [id], onDelete: Cascade)
+  campaignMember    CampaignMember? @relation(fields: [campaignMemberId], references: [id])
+
+  @@index([reminderRuleId, status])
+  @@index([careProviderId, createdAt])
+  @@index([status, scheduledFor])
 }

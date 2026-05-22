@@ -6,7 +6,7 @@
  *
  * Run: npm run db:seed
  */
-import { PrismaClient, AttributeType, PiiLevel } from "@prisma/client";
+import { PrismaClient, AttributeType, PiiLevel, Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -1038,8 +1038,8 @@ async function upsertAttribute(seed: AttributeSeed) {
       type: seed.type,
       category: seed.category,
       helpText: seed.helpText,
-      options: seed.options ?? undefined,
-      validation: seed.validation ?? undefined,
+      options: seed.options ? (seed.options as Prisma.InputJsonValue) : Prisma.JsonNull,
+      validation: seed.validation ? (seed.validation as Prisma.InputJsonValue) : Prisma.JsonNull,
       piiLevel: seed.piiLevel ?? "NONE",
       isSearchable: seed.isSearchable ?? false,
       isSystem: seed.isSystem ?? false,
@@ -1050,8 +1050,8 @@ async function upsertAttribute(seed: AttributeSeed) {
       type: seed.type,
       category: seed.category,
       helpText: seed.helpText,
-      options: seed.options ?? undefined,
-      validation: seed.validation ?? undefined,
+      options: seed.options ? (seed.options as Prisma.InputJsonValue) : Prisma.JsonNull,
+      validation: seed.validation ? (seed.validation as Prisma.InputJsonValue) : Prisma.JsonNull,
       piiLevel: seed.piiLevel ?? "NONE",
       isSearchable: seed.isSearchable ?? false,
       isSystem: seed.isSystem ?? false,

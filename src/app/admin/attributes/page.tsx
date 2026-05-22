@@ -196,8 +196,8 @@ export default async function AttributesPage({
                   <PiiBadge level={a.piiLevel} />
                 </td>
                 <td className="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">
-                  {a._count.profileTypeAttrs} role
-                  {a._count.profileTypeAttrs === 1 ? "" : "s"}
+                  {(a as { _count: { profileTypeAttrs: number } } & typeof a)._count.profileTypeAttrs} role
+                  {(a as { _count: { profileTypeAttrs: number } } & typeof a)._count.profileTypeAttrs === 1 ? "" : "s"}
                 </td>
                 <td className="px-4 py-2.5 space-x-1.5">
                   {a.isSystem && (
