@@ -1,6 +1,19 @@
 import { prisma } from "@/lib/db";
 import Link from "next/link";
 import { AttributeType } from "@prisma/client";
+import { Plus, Search, X, ListChecks } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 type SearchParams = Promise<{
   q?: string;
@@ -16,7 +29,7 @@ export default async function AttributesPage({
 }) {
   const { q, type, archived, category } = await searchParams;
 
-  const where: Parameters<typeof prisma.attribute.findMany>[0] = {
+  const attributes = await prisma.attribute.findMany({
     where: {
       ...(archived === "1"
         ? { NOT: { archivedAt: null } }
@@ -34,8 +47,8 @@ export default async function AttributesPage({
     },
     orderBy: [{ category: "asc" }, { label: "asc" }],
     include: { _count: { select: { profileTypeAttrs: true } } },
-  };
-  const attributes = await prisma.attribute.findMany(where);
+  });
+
   const allCategories = await prisma.attribute.findMany({
     where: { archivedAt: null, category: { not: null } },
     distinct: ["category"],
@@ -43,188 +56,174 @@ export default async function AttributesPage({
     orderBy: { category: "asc" },
   });
 
+  const hasFilters = q || type || category || archived === "1";
+
   return (
-    <div className="px-8 py-8">
-      <header className="flex items-center justify-between mb-6">
+    <div className="p-6 md:p-8 space-y-5">
+      <header className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-            Attributes
-          </h1>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1">
-            The atomic data points captured per care provider. Profile types
-            bundle these into roles.
+          <h1>Attributes</h1>
+          <p className="text-sm text-muted-foreground">
+            Atomic data points captured per care provider. Profile types bundle
+            these into roles.
           </p>
         </div>
-        <Link
-          href="/admin/attributes/new"
-          className="px-4 py-2 rounded-md bg-zinc-900 dark:bg-zinc-50 text-white dark:text-zinc-900 text-sm font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200"
-        >
-          + New attribute
-        </Link>
+        <Button asChild>
+          <Link href="/admin/attributes/new">
+            <Plus className="size-4" />
+            New attribute
+          </Link>
+        </Button>
       </header>
 
-      <form
-        className="mb-6 flex flex-wrap items-center gap-3"
-        method="GET"
-        action="/admin/attributes"
-      >
-        <input
-          type="search"
-          name="q"
-          defaultValue={q ?? ""}
-          placeholder="Search key or label..."
-          className="px-3 py-1.5 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm w-64"
-        />
-
-        <select
-          name="type"
-          defaultValue={type ?? ""}
-          className="px-3 py-1.5 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm"
-        >
-          <option value="">All types</option>
-          {Object.keys(AttributeType).map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-
-        <select
-          name="category"
-          defaultValue={category ?? ""}
-          className="px-3 py-1.5 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm"
-        >
-          <option value="">All categories</option>
-          {allCategories
-            .map((c) => c.category)
-            .filter(Boolean)
-            .map((c) => (
-              <option key={c!} value={c!}>
-                {c}
-              </option>
-            ))}
-        </select>
-
-        <select
-          name="archived"
-          defaultValue={archived ?? "0"}
-          className="px-3 py-1.5 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm"
-        >
-          <option value="0">Active only</option>
-          <option value="1">Archived only</option>
-        </select>
-
-        <button
-          type="submit"
-          className="px-3 py-1.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-sm hover:bg-zinc-200 dark:hover:bg-zinc-700"
-        >
-          Apply
-        </button>
-        {(q || type || category || archived) && (
-          <Link
-            href="/admin/attributes"
-            className="px-3 py-1.5 text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-50"
+      <Card>
+        <CardContent className="p-4">
+          <form
+            method="GET"
+            action="/admin/attributes"
+            className="flex flex-wrap items-center gap-2"
           >
-            Clear
-          </Link>
-        )}
-      </form>
-
-      <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-zinc-50 dark:bg-zinc-900/50 border-b border-zinc-200 dark:border-zinc-800">
-            <tr className="text-left">
-              <th className="px-4 py-2.5 font-medium text-zinc-600 dark:text-zinc-400">
-                Key
-              </th>
-              <th className="px-4 py-2.5 font-medium text-zinc-600 dark:text-zinc-400">
-                Label
-              </th>
-              <th className="px-4 py-2.5 font-medium text-zinc-600 dark:text-zinc-400">
-                Type
-              </th>
-              <th className="px-4 py-2.5 font-medium text-zinc-600 dark:text-zinc-400">
-                Category
-              </th>
-              <th className="px-4 py-2.5 font-medium text-zinc-600 dark:text-zinc-400">
-                PII
-              </th>
-              <th className="px-4 py-2.5 font-medium text-zinc-600 dark:text-zinc-400">
-                Used in
-              </th>
-              <th className="px-4 py-2.5 font-medium text-zinc-600 dark:text-zinc-400">
-                Flags
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {attributes.length === 0 && (
-              <tr>
-                <td
-                  colSpan={7}
-                  className="px-4 py-8 text-center text-zinc-500 dark:text-zinc-400"
-                >
-                  No attributes match these filters.
-                </td>
-              </tr>
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Input
+                type="search"
+                name="q"
+                defaultValue={q ?? ""}
+                placeholder="Search key or label…"
+                className="pl-8"
+              />
+            </div>
+            <select
+              name="type"
+              defaultValue={type ?? ""}
+              className="h-9 px-3 rounded-md border bg-background text-sm"
+            >
+              <option value="">All types</option>
+              {Object.keys(AttributeType).map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+            <select
+              name="category"
+              defaultValue={category ?? ""}
+              className="h-9 px-3 rounded-md border bg-background text-sm"
+            >
+              <option value="">All categories</option>
+              {allCategories
+                .map((c) => c.category)
+                .filter(Boolean)
+                .map((c) => (
+                  <option key={c!} value={c!}>
+                    {c}
+                  </option>
+                ))}
+            </select>
+            <select
+              name="archived"
+              defaultValue={archived ?? "0"}
+              className="h-9 px-3 rounded-md border bg-background text-sm"
+            >
+              <option value="0">Active only</option>
+              <option value="1">Archived only</option>
+            </select>
+            <Button type="submit" variant="secondary" size="sm">
+              Apply
+            </Button>
+            {hasFilters && (
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/admin/attributes">
+                  <X className="size-3.5" />
+                  Clear
+                </Link>
+              </Button>
             )}
-            {attributes.map((a) => (
-              <tr
-                key={a.id}
-                className="hover:bg-zinc-50 dark:hover:bg-zinc-900/50"
-              >
-                <td className="px-4 py-2.5">
-                  <Link
-                    href={`/admin/attributes/${a.id}`}
-                    className="font-mono text-xs text-zinc-700 dark:text-zinc-300 hover:underline"
-                  >
-                    {a.key}
-                  </Link>
-                </td>
-                <td className="px-4 py-2.5 text-zinc-900 dark:text-zinc-50">
-                  {a.label}
-                </td>
-                <td className="px-4 py-2.5">
-                  <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
-                    {a.type}
-                  </span>
-                </td>
-                <td className="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">
-                  {a.category ?? "—"}
-                </td>
-                <td className="px-4 py-2.5">
-                  <PiiBadge level={a.piiLevel} />
-                </td>
-                <td className="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">
-                  {(a as { _count: { profileTypeAttrs: number } } & typeof a)._count.profileTypeAttrs} role
-                  {(a as { _count: { profileTypeAttrs: number } } & typeof a)._count.profileTypeAttrs === 1 ? "" : "s"}
-                </td>
-                <td className="px-4 py-2.5 space-x-1.5">
-                  {a.isSystem && (
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-                      system
-                    </span>
-                  )}
-                  {a.isSearchable && (
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400">
-                      searchable
-                    </span>
-                  )}
-                  {a.archivedAt && (
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400">
-                      archived
-                    </span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          </form>
+        </CardContent>
+      </Card>
 
-      <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-3">
-        Showing {attributes.length} attribute
-        {attributes.length === 1 ? "" : "s"}.
+      {attributes.length === 0 ? (
+        <Card>
+          <CardContent className="p-12 text-center">
+            <ListChecks className="size-8 mx-auto text-muted-foreground mb-3" />
+            <p className="text-sm text-muted-foreground">
+              No attributes match these filters.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                <TableHead>Key / Label</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>PII</TableHead>
+                <TableHead className="text-right">Used in</TableHead>
+                <TableHead>Flags</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {attributes.map((a) => {
+                const usedIn = (
+                  a as { _count: { profileTypeAttrs: number } } & typeof a
+                )._count.profileTypeAttrs;
+                return (
+                  <TableRow key={a.id}>
+                    <TableCell className="py-2.5">
+                      <Link
+                        href={`/admin/attributes/${a.id}`}
+                        className="font-medium hover:underline"
+                      >
+                        {a.label}
+                      </Link>
+                      <div className="font-mono text-[11px] text-muted-foreground mt-0.5">
+                        {a.key}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="font-mono text-[10px]">
+                        {a.type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {a.category ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      <PiiBadge level={a.piiLevel} />
+                    </TableCell>
+                    <TableCell className="text-right text-sm tabular-nums text-muted-foreground">
+                      {usedIn} role{usedIn === 1 ? "" : "s"}
+                    </TableCell>
+                    <TableCell className="space-x-1">
+                      {a.isSystem && (
+                        <Badge variant="outline" className="text-[10px]">
+                          system
+                        </Badge>
+                      )}
+                      {a.isSearchable && (
+                        <Badge variant="secondary" className="text-[10px]">
+                          searchable
+                        </Badge>
+                      )}
+                      {a.archivedAt && (
+                        <Badge variant="outline" className="text-[10px]">
+                          archived
+                        </Badge>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        Showing {attributes.length} attribute{attributes.length === 1 ? "" : "s"}.
       </p>
     </div>
   );
@@ -232,16 +231,16 @@ export default async function AttributesPage({
 
 function PiiBadge({ level }: { level: string }) {
   if (level === "NONE")
-    return <span className="text-xs text-zinc-400">—</span>;
-  const colors: Record<string, string> = {
-    LOW: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400",
-    MEDIUM:
-      "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400",
-    HIGH: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400",
-  };
+    return <span className="text-xs text-muted-foreground">—</span>;
+  const tone =
+    level === "HIGH"
+      ? "bg-destructive/15 text-destructive"
+      : level === "MEDIUM"
+        ? "bg-warning/15 text-warning"
+        : "bg-success/15 text-success";
   return (
     <span
-      className={`text-xs px-1.5 py-0.5 rounded ${colors[level] ?? "bg-zinc-100"}`}
+      className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${tone}`}
     >
       {level}
     </span>

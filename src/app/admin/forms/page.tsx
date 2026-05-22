@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/db";
 import Link from "next/link";
 import { FormPurpose } from "@prisma/client";
+import { Plus, FileText, ArrowUpRight } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 const PURPOSE_LABELS: Record<string, string> = {
   ONBOARDING: "Onboarding (Invite)",
@@ -21,17 +25,6 @@ const PURPOSE_DESC: Record<string, string> = {
   CUSTOM: "Anything else.",
 };
 
-const PURPOSE_COLORS: Record<string, string> = {
-  ONBOARDING: "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400",
-  APPOINTMENT_CONFIRM:
-    "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400",
-  APPOINTMENT_EXECUTION:
-    "bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-400",
-  POST_APPOINTMENT:
-    "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400",
-  CUSTOM: "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300",
-};
-
 export default async function FormsPage() {
   const forms = await prisma.formTemplate.findMany({
     where: { status: { not: "ARCHIVED" } },
@@ -45,105 +38,106 @@ export default async function FormsPage() {
   }, {});
 
   return (
-    <div className="px-8 py-8">
-      <header className="flex items-center justify-between mb-6">
+    <div className="p-6 md:p-8 space-y-6">
+      <header className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-            Forms
-          </h1>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1">
+          <h1>Forms</h1>
+          <p className="text-sm text-muted-foreground">
             Configurable forms shown to care providers at each lifecycle stage.
           </p>
         </div>
-        <Link
-          href="/admin/forms/new"
-          className="px-4 py-2 rounded-md bg-zinc-900 dark:bg-zinc-50 text-white dark:text-zinc-900 text-sm font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200"
-        >
-          + New form
-        </Link>
+        <Button asChild>
+          <Link href="/admin/forms/new">
+            <Plus className="size-4" />
+            New form
+          </Link>
+        </Button>
       </header>
 
-      {forms.length === 0 && (
-        <div className="rounded-lg border border-dashed border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-10 text-center">
-          <h3 className="font-medium text-zinc-900 dark:text-zinc-50 mb-1">
-            No forms yet
-          </h3>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-4 max-w-md mx-auto">
-            Create one form per lifecycle stage. Each has a purpose (onboarding,
-            appointment confirmation, execution) that drives the default
-            structure and action buttons.
-          </p>
-          <Link
-            href="/admin/forms/new"
-            className="inline-block px-4 py-2 rounded-md bg-zinc-900 dark:bg-zinc-50 text-white dark:text-zinc-900 text-sm font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200"
-          >
-            Create your first form
-          </Link>
-        </div>
-      )}
-
-      <div className="space-y-6">
-        {Object.keys(FormPurpose).map((purpose) => {
+      {forms.length === 0 ? (
+        <Card>
+          <CardContent className="p-12 text-center">
+            <FileText className="size-8 mx-auto text-muted-foreground mb-3" />
+            <h3 className="text-base mb-1">No forms yet</h3>
+            <p className="text-sm text-muted-foreground mb-4 max-w-md mx-auto">
+              Create one form per lifecycle stage. Each has a purpose
+              (onboarding, appointment, execution) that drives the default
+              structure and action buttons.
+            </p>
+            <Button asChild>
+              <Link href="/admin/forms/new">
+                <Plus className="size-4" />
+                Create your first form
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        Object.keys(FormPurpose).map((purpose) => {
           const items = grouped[purpose] ?? [];
           if (items.length === 0) return null;
           return (
-            <section key={purpose}>
-              <div className="flex items-baseline gap-3 mb-3">
-                <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
-                  {PURPOSE_LABELS[purpose]}
-                </h2>
-                <span className="text-xs text-zinc-500 dark:text-zinc-400">
+            <section key={purpose} className="space-y-3">
+              <div>
+                <h2>{PURPOSE_LABELS[purpose]}</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
                   {PURPOSE_DESC[purpose]}
-                </span>
+                </p>
               </div>
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {items.map((f) => (
-                  <Link
+                  <Card
                     key={f.id}
-                    href={`/admin/forms/${f.id}`}
-                    className="block p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700"
+                    className="hover:border-foreground/20 transition-colors group"
                   >
-                    <div className="flex items-start justify-between mb-1.5">
-                      <h3 className="font-medium text-zinc-900 dark:text-zinc-50 truncate">
-                        {f.name}
-                      </h3>
-                      <StatusBadge status={f.status} />
-                    </div>
-                    <div className="text-xs text-zinc-500 dark:text-zinc-400 space-x-2">
-                      <span
-                        className={`px-1.5 py-0.5 rounded ${PURPOSE_COLORS[purpose]}`}
-                      >
-                        {purpose}
-                      </span>
-                      <span>
-                        {f.profileType ? f.profileType.label : "All roles"}
-                      </span>
-                      <span>· v{f.version}</span>
-                    </div>
-                  </Link>
+                    <Link
+                      href={`/admin/forms/${f.id}`}
+                      className="block p-4 space-y-2"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-medium truncate">{f.name}</h3>
+                        <StatusBadge status={f.status} />
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] font-mono"
+                        >
+                          {purpose}
+                        </Badge>
+                        <span>·</span>
+                        <span>
+                          {f.profileType ? f.profileType.label : "All roles"}
+                        </span>
+                        <span>·</span>
+                        <span>v{f.version}</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        Open form
+                        <ArrowUpRight className="size-3" />
+                      </div>
+                    </Link>
+                  </Card>
                 ))}
               </div>
             </section>
           );
-        })}
-      </div>
+        })
+      )}
     </div>
   );
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    DRAFT: "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400",
-    PUBLISHED:
-      "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400",
-    ARCHIVED:
-      "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400",
-  };
+  const variant =
+    status === "PUBLISHED"
+      ? "default"
+      : status === "ARCHIVED"
+        ? "outline"
+        : "secondary";
   return (
-    <span
-      className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${map[status] ?? map.DRAFT}`}
-    >
+    <Badge variant={variant} className="text-[10px] uppercase tracking-wide">
       {status}
-    </span>
+    </Badge>
   );
 }
