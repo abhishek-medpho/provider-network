@@ -148,7 +148,16 @@ export default async function CampaignDetailPage({
 
   const canLaunch =
     !!campaign.inviteMessageTemplateId && !!campaign.formTemplateId;
-  const pendingMembers = stats.PENDING ?? 0;
+  // Match the same filter dispatchInvites uses — exclude opted-out providers
+  // so the button label doesn't promise sends we'll then filter out.
+  const pendingMembers = await prisma.campaignMember.count({
+    where: {
+      campaignId: id,
+      status: "PENDING",
+      lastSentAt: null,
+      careProvider: { optedOutAt: null },
+    },
+  });
 
   return (
     <div className="p-6 md:p-8 space-y-5 max-w-6xl">
