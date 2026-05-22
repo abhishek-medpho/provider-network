@@ -2,6 +2,17 @@ import { prisma } from "@/lib/db";
 import Link from "next/link";
 import { createCampaign } from "@/lib/actions/campaigns";
 import RemindersEditor from "../_components/RemindersEditor";
+import { ChevronLeft } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export default async function NewCampaignPage() {
   const [profileTypes, forms, templates] = await Promise.all([
@@ -32,157 +43,158 @@ export default async function NewCampaignPage() {
   );
 
   return (
-    <div className="px-8 py-8 max-w-3xl">
-      <Link
-        href="/admin/campaigns"
-        className="text-sm text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-50 mb-4 inline-block"
-      >
-        ← All campaigns
-      </Link>
+    <div className="p-6 md:p-8 space-y-5 max-w-3xl">
+      <Button variant="ghost" size="sm" asChild className="-ml-2">
+        <Link href="/admin/campaigns">
+          <ChevronLeft className="size-4" />
+          All campaigns
+        </Link>
+      </Button>
 
-      <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50 mb-2">
-        New campaign
-      </h1>
-      <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-6">
-        Saved as DRAFT first. Upload your CSV and review on the next screen
-        before launching.
-      </p>
+      <header>
+        <h1>New campaign</h1>
+        <p className="text-sm text-muted-foreground">
+          Saved as DRAFT first. Upload your CSV and review on the next screen
+          before launching.
+        </p>
+      </header>
 
-      <form action={createCampaign} className="space-y-6">
-        <Section title="Basics">
-          <Field
-            label="Campaign name"
-            name="name"
-            required
-            placeholder="e.g. April 2026 — Bangalore Nurse Drive"
-          />
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Profile type <span className="text-red-500">*</span>
-            </label>
-            <select
-              name="profileTypeId"
+      <form action={createCampaign} className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Basics</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Field
+              label="Campaign name"
+              name="name"
               required
-              defaultValue=""
-              className="w-full px-3 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm"
-            >
-              <option value="" disabled>
-                — Select —
-              </option>
-              {profileTypes.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              All uploaded leads will be tagged as this profile type.
-            </p>
-          </div>
-        </Section>
-
-        <Section title="What gets sent">
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Onboarding form
-            </label>
-            <select
-              name="formTemplateId"
-              defaultValue=""
-              className="w-full px-3 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm"
-            >
-              <option value="">— None (link will 404 until set) —</option>
-              {forms.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name} {f.status === "DRAFT" ? " · draft" : ""}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              The form care providers will fill via the WhatsApp link.
-            </p>
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Invite message template
-            </label>
-            <select
-              name="inviteMessageTemplateId"
-              defaultValue=""
-              className="w-full px-3 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm"
-            >
-              <option value="">— None (cannot launch without one) —</option>
-              {inviteTemplates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} ({t.code})
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Variables: {`{{name}}, {{form_link}}, {{role_label}}`}, etc.
-            </p>
-          </div>
-        </Section>
-
-        <Section title="Reminders">
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Auto-send a follow-up to providers who haven&apos;t submitted yet.
-            Evaluated when you press &quot;Run reminders now&quot; on the
-            campaign page (or by a cron, later).
-          </p>
-          <RemindersEditor initial={[]} templates={templates} />
-        </Section>
-
-        <Section title="Throttling">
-          <div className="grid grid-cols-2 gap-3">
-            <Field
-              label="Max sends per day"
-              name="maxSendsPerDay"
-              type="number"
-              defaultValue="100"
-              help="Ultramsg bans are real. Start conservative."
+              placeholder="e.g. April 2026 — Bangalore Nurse Drive"
             />
-            <Field
-              label="Max sends per provider"
-              name="maxSendsPerProvider"
-              type="number"
-              defaultValue="4"
-              help="Across invite + all reminders."
-            />
-          </div>
-        </Section>
+            <div className="space-y-1.5">
+              <Label htmlFor="profileTypeId">
+                Profile type <span className="text-destructive">*</span>
+              </Label>
+              <select
+                id="profileTypeId"
+                name="profileTypeId"
+                required
+                defaultValue=""
+                className="w-full h-9 px-3 rounded-md border bg-background text-sm"
+              >
+                <option value="" disabled>
+                  — Select —
+                </option>
+                {profileTypes.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                All uploaded leads will be tagged as this profile type.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
 
-        <div className="flex gap-3">
-          <button
-            type="submit"
-            className="px-4 py-2 rounded-md bg-zinc-900 dark:bg-zinc-50 text-white dark:text-zinc-900 text-sm font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200"
-          >
-            Create draft
-          </button>
-          <Link
-            href="/admin/campaigns"
-            className="px-4 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800"
-          >
-            Cancel
-          </Link>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">What gets sent</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="formTemplateId">Onboarding form</Label>
+              <select
+                id="formTemplateId"
+                name="formTemplateId"
+                defaultValue=""
+                className="w-full h-9 px-3 rounded-md border bg-background text-sm"
+              >
+                <option value="">— None (link will 404 until set) —</option>
+                {forms.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name} {f.status === "DRAFT" ? " · draft" : ""}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                The form care providers will fill via the WhatsApp link.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="inviteMessageTemplateId">
+                Invite message template
+              </Label>
+              <select
+                id="inviteMessageTemplateId"
+                name="inviteMessageTemplateId"
+                defaultValue=""
+                className="w-full h-9 px-3 rounded-md border bg-background text-sm"
+              >
+                <option value="">— None (cannot launch without one) —</option>
+                {inviteTemplates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({t.code})
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Variables:{" "}
+                <code className="font-mono text-[11px] px-1 py-px bg-muted rounded">
+                  {`{{name}} {{form_link}} {{role_label}}`}
+                </code>
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Reminders</CardTitle>
+            <CardDescription>
+              Auto-send a follow-up to providers who haven&apos;t submitted yet.
+              Evaluated when you press &quot;Run reminders now&quot; on the
+              campaign page.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RemindersEditor initial={[]} templates={templates} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Throttling</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-3">
+              <Field
+                label="Max sends per day"
+                name="maxSendsPerDay"
+                type="number"
+                defaultValue="100"
+                help="Ultramsg bans are real. Start conservative."
+              />
+              <Field
+                label="Max sends per provider"
+                name="maxSendsPerProvider"
+                type="number"
+                defaultValue="4"
+                help="Across invite + all reminders."
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="flex gap-2">
+          <Button type="submit">Create draft</Button>
+          <Button variant="outline" asChild>
+            <Link href="/admin/campaigns">Cancel</Link>
+          </Button>
         </div>
       </form>
     </div>
-  );
-}
-
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 space-y-4">
-      <h2 className="font-medium text-zinc-900 dark:text-zinc-50">{title}</h2>
-      {children}
-    </section>
   );
 }
 
@@ -204,26 +216,20 @@ function Field({
   help?: string;
 }) {
   return (
-    <div className="space-y-1">
-      <label
-        htmlFor={name}
-        className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
-      >
+    <div className="space-y-1.5">
+      <Label htmlFor={name}>
         {label}
-        {required && <span className="text-red-500 ml-0.5">*</span>}
-      </label>
-      <input
+        {required && <span className="text-destructive ml-0.5">*</span>}
+      </Label>
+      <Input
         id={name}
         name={name}
         type={type}
         defaultValue={defaultValue}
         placeholder={placeholder}
         required={required}
-        className="w-full px-3 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm"
       />
-      {help && (
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">{help}</p>
-      )}
+      {help && <p className="text-xs text-muted-foreground">{help}</p>}
     </div>
   );
 }

@@ -15,29 +15,36 @@ import { LaunchButton, RemindersButton } from "../_components/LaunchButtons";
 import RemindersEditor from "../_components/RemindersEditor";
 import Analytics from "../_components/Analytics";
 import { getCampaignAnalytics } from "@/lib/analytics/campaign";
-
-const STATUS_COLORS: Record<string, string> = {
-  DRAFT: "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400",
-  RUNNING:
-    "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400",
-  PAUSED:
-    "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400",
-  COMPLETED: "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400",
-  ARCHIVED:
-    "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400",
-};
-
-const MEMBER_STATUS_COLORS: Record<string, string> = {
-  PENDING: "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400",
-  SENT: "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400",
-  ENGAGED: "bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-400",
-  SUBMITTED:
-    "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400",
-  COMPLETED:
-    "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400",
-  OPTED_OUT: "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400",
-  FAILED: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400",
-};
+import {
+  ChevronLeft,
+  Upload,
+  Play,
+  Bell,
+  Pause,
+  Archive,
+  AlertTriangle,
+  ExternalLink,
+} from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export default async function CampaignDetailPage({
   params,
@@ -52,7 +59,9 @@ export default async function CampaignDetailPage({
       include: {
         profileType: { select: { label: true, code: true } },
         formTemplate: { select: { id: true, name: true, status: true } },
-        inviteMessageTemplate: { select: { id: true, name: true, code: true } },
+        inviteMessageTemplate: {
+          select: { id: true, name: true, code: true },
+        },
         leadBatch: { select: { name: true, rowCount: true, source: true } },
         _count: { select: { members: true, whatsappMessages: true } },
       },
@@ -76,10 +85,8 @@ export default async function CampaignDetailPage({
 
   if (!campaign) notFound();
 
-  // Analytics bundle (funnel, reminders, timing, by-source, failures)
   const analytics = await getCampaignAnalytics(id);
 
-  // Member stats
   const statsRaw = await prisma.campaignMember.groupBy({
     by: ["status"],
     _count: { _all: true },
@@ -139,330 +146,355 @@ export default async function CampaignDetailPage({
     await archiveCampaign(id);
   }
 
-  const canLaunch = !!campaign.inviteMessageTemplateId && !!campaign.formTemplateId;
+  const canLaunch =
+    !!campaign.inviteMessageTemplateId && !!campaign.formTemplateId;
   const pendingMembers = stats.PENDING ?? 0;
 
   return (
-    <div className="px-8 py-8 max-w-5xl">
-      <Link
-        href="/admin/campaigns"
-        className="text-sm text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-50 mb-4 inline-block"
-      >
-        ← All campaigns
-      </Link>
+    <div className="p-6 md:p-8 space-y-5 max-w-6xl">
+      <Button variant="ghost" size="sm" asChild className="-ml-2">
+        <Link href="/admin/campaigns">
+          <ChevronLeft className="size-4" />
+          All campaigns
+        </Link>
+      </Button>
 
-      <header className="mb-6 flex items-start justify-between gap-4">
+      <header className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-2xl font-semibold tracking-tight">
               {campaign.name}
             </h1>
-            <span
-              className={`text-xs uppercase tracking-wide px-1.5 py-0.5 rounded ${STATUS_COLORS[campaign.status]}`}
-            >
-              {campaign.status}
-            </span>
+            <CampaignStatusBadge status={campaign.status} />
           </div>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="text-sm text-muted-foreground mt-1">
             {campaign.profileType.label}
-            {campaign.formTemplate ? ` · form: ${campaign.formTemplate.name}` : ""}
-            {campaign.inviteMessageTemplate
-              ? ` · invite: ${campaign.inviteMessageTemplate.name}`
-              : ""}
+            {campaign.formTemplate &&
+              ` · form: ${campaign.formTemplate.name}`}
+            {campaign.inviteMessageTemplate &&
+              ` · invite: ${campaign.inviteMessageTemplate.name}`}
           </p>
         </div>
       </header>
 
       <Analytics data={analytics} />
 
-      {/* Upload */}
-      <section className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 mb-6">
-        <h2 className="font-medium text-zinc-900 dark:text-zinc-50 mb-3">
-          Upload leads
-        </h2>
-        <UploadLeads action={uploadAction} />
-      </section>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Upload className="size-4" />
+            Upload leads
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <UploadLeads action={uploadAction} />
+        </CardContent>
+      </Card>
 
-      {/* Launch & reminders */}
-      <section className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 mb-6 space-y-4">
-        <h2 className="font-medium text-zinc-900 dark:text-zinc-50">
-          Run campaign
-        </h2>
-
-        {!canLaunch && (
-          <div className="rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 px-3 py-2 text-sm">
-            {!campaign.formTemplateId && "Form template not set. "}
-            {!campaign.inviteMessageTemplateId &&
-              "Invite message template not set. "}
-            Configure these in Settings below before launching.
-          </div>
-        )}
-
-        {canLaunch && (
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-2">
-                Send the invite WhatsApp message to all PENDING members.
-                Throttled by campaign settings.
-              </p>
-              <LaunchButton
-                action={launchAction}
-                pendingMembers={pendingMembers}
-              />
-            </div>
-            <div>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-2">
-                Re-evaluate reminder rules and send to members who&apos;ve gone
-                cold.
-              </p>
-              <RemindersButton action={remindersAction} />
-            </div>
-          </div>
-        )}
-
-        <div className="flex gap-2 pt-3 border-t border-zinc-200 dark:border-zinc-800">
-          {campaign.status === "RUNNING" && (
-            <form action={pauseAction}>
-              <button
-                type="submit"
-                className="px-3 py-1.5 rounded-md border border-zinc-300 dark:border-zinc-700 text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800"
-              >
-                Pause
-              </button>
-            </form>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Run campaign</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!canLaunch && (
+            <Alert>
+              <AlertTriangle className="size-4" />
+              <AlertDescription>
+                {!campaign.formTemplateId && "Form template not set. "}
+                {!campaign.inviteMessageTemplateId &&
+                  "Invite message template not set. "}
+                Configure these in Settings below before launching.
+              </AlertDescription>
+            </Alert>
           )}
-          {campaign.status === "PAUSED" && (
-            <form action={resumeAction}>
-              <button
-                type="submit"
-                className="px-3 py-1.5 rounded-md border border-zinc-300 dark:border-zinc-700 text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800"
-              >
-                Resume
-              </button>
-            </form>
-          )}
-          <form action={archiveAction}>
-            <button
-              type="submit"
-              className="px-3 py-1.5 rounded-md border border-red-200 dark:border-red-900 text-red-700 dark:text-red-400 text-sm font-medium hover:bg-red-50 dark:hover:bg-red-950/40"
-            >
-              Archive
-            </button>
-          </form>
-        </div>
-      </section>
 
-      {/* Members */}
-      <section className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 mb-6 overflow-hidden">
-        <div className="px-5 py-3 border-b border-zinc-200 dark:border-zinc-800">
-          <h2 className="font-medium text-zinc-900 dark:text-zinc-50">
-            Members{members.length === 200 && " (first 200)"}
-          </h2>
-        </div>
+          {canLaunch && (
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Play className="size-4" />
+                  Send invites
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Send the invite WhatsApp message to all PENDING members.
+                  Throttled by campaign settings.
+                </p>
+                <LaunchButton
+                  action={launchAction}
+                  pendingMembers={pendingMembers}
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Bell className="size-4" />
+                  Run reminders
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Re-evaluate reminder rules and send to members who&apos;ve
+                  gone cold.
+                </p>
+                <RemindersButton action={remindersAction} />
+              </div>
+            </div>
+          )}
+
+          <Separator />
+
+          <div className="flex gap-2 flex-wrap">
+            {campaign.status === "RUNNING" && (
+              <form action={pauseAction}>
+                <Button type="submit" variant="outline" size="sm">
+                  <Pause className="size-3.5" />
+                  Pause
+                </Button>
+              </form>
+            )}
+            {campaign.status === "PAUSED" && (
+              <form action={resumeAction}>
+                <Button type="submit" variant="outline" size="sm">
+                  <Play className="size-3.5" />
+                  Resume
+                </Button>
+              </form>
+            )}
+            <form action={archiveAction}>
+              <Button
+                type="submit"
+                variant="outline"
+                size="sm"
+                className="text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+              >
+                <Archive className="size-3.5" />
+                Archive
+              </Button>
+            </form>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="overflow-hidden">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm">
+            Members
+            {members.length === 200 && (
+              <span className="text-muted-foreground font-normal ml-1">
+                (first 200)
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
         {members.length === 0 ? (
-          <div className="px-5 py-10 text-center text-sm text-zinc-500 dark:text-zinc-400">
+          <CardContent className="text-center py-10 text-sm text-muted-foreground">
             No leads uploaded yet. Use the form above.
-          </div>
+          </CardContent>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-zinc-50 dark:bg-zinc-900/50 border-b border-zinc-200 dark:border-zinc-800">
-              <tr className="text-left">
-                <th className="px-4 py-2 font-medium text-zinc-600 dark:text-zinc-400">
-                  Name
-                </th>
-                <th className="px-4 py-2 font-medium text-zinc-600 dark:text-zinc-400">
-                  Phone
-                </th>
-                <th className="px-4 py-2 font-medium text-zinc-600 dark:text-zinc-400">
-                  Status
-                </th>
-                <th className="px-4 py-2 font-medium text-zinc-600 dark:text-zinc-400">
-                  Reminders
-                </th>
-                <th className="px-4 py-2 font-medium text-zinc-600 dark:text-zinc-400">
-                  Last sent
-                </th>
-                <th className="px-4 py-2 font-medium text-zinc-600 dark:text-zinc-400">
-                  Form
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                <TableHead>Name</TableHead>
+                <TableHead>Phone</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Reminders</TableHead>
+                <TableHead>Last sent</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {members.map((m) => (
-                <tr key={m.id}>
-                  <td className="px-4 py-2 text-zinc-900 dark:text-zinc-50">
-                    {m.careProvider.name ?? "—"}
-                  </td>
-                  <td className="px-4 py-2 font-mono text-xs text-zinc-600 dark:text-zinc-400">
+                <TableRow key={m.id}>
+                  <TableCell className="py-2.5">
+                    <Link
+                      href={`/admin/care-providers/${m.careProvider.id}`}
+                      className="font-medium hover:underline"
+                    >
+                      {m.careProvider.name ?? (
+                        <span className="text-muted-foreground italic">
+                          —
+                        </span>
+                      )}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
                     {m.careProvider.phone}
-                  </td>
-                  <td className="px-4 py-2">
-                    <span
-                      className={`text-xs uppercase tracking-wide px-1.5 py-0.5 rounded ${MEMBER_STATUS_COLORS[m.status] ?? ""}`}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px]"
                     >
                       {m.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-zinc-600 dark:text-zinc-400">
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right text-sm tabular-nums text-muted-foreground">
                     {m.remindersSent}
-                  </td>
-                  <td className="px-4 py-2 text-xs text-zinc-500 dark:text-zinc-400">
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
                     {m.lastSentAt
-                      ? new Date(m.lastSentAt).toLocaleString()
+                      ? relTime(m.lastSentAt)
                       : "—"}
-                  </td>
-                  <td className="px-4 py-2">
-                    <Link
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <a
                       href={`/onboard/${m.token}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-zinc-500 dark:text-zinc-400 hover:underline"
+                      className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-0.5"
                     >
-                      Open ↗
-                    </Link>
-                  </td>
-                </tr>
+                      Form
+                      <ExternalLink className="size-3" />
+                    </a>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
-      </section>
+      </Card>
 
-      {/* Settings */}
-      <section className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5">
-        <h2 className="font-medium text-zinc-900 dark:text-zinc-50 mb-3">
-          Settings
-        </h2>
-        <form action={settingsAction} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Name
-              </label>
-              <input
-                name="name"
-                defaultValue={campaign.name}
-                required
-                className="w-full px-3 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm"
-              />
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Settings</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form action={settingsAction} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="name">Name</Label>
+                <Input
+                  id="name"
+                  name="name"
+                  defaultValue={campaign.name}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="profileTypeId">Profile type</Label>
+                <select
+                  id="profileTypeId"
+                  disabled
+                  defaultValue={campaign.profileTypeId}
+                  className="w-full h-9 px-3 rounded-md border bg-muted text-sm cursor-not-allowed opacity-70"
+                >
+                  {profileTypes.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Locked once campaign created.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="formTemplateId">Form</Label>
+                <select
+                  id="formTemplateId"
+                  name="formTemplateId"
+                  defaultValue={campaign.formTemplateId ?? ""}
+                  className="w-full h-9 px-3 rounded-md border bg-background text-sm"
+                >
+                  <option value="">— None —</option>
+                  {forms.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="inviteMessageTemplateId">
+                  Invite message template
+                </Label>
+                <select
+                  id="inviteMessageTemplateId"
+                  name="inviteMessageTemplateId"
+                  defaultValue={campaign.inviteMessageTemplateId ?? ""}
+                  className="w-full h-9 px-3 rounded-md border bg-background text-sm"
+                >
+                  <option value="">— None —</option>
+                  {inviteTemplates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Profile type
-              </label>
-              <select
-                disabled
-                defaultValue={campaign.profileTypeId}
-                className="w-full px-3 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-sm cursor-not-allowed opacity-70"
-              >
-                {profileTypes.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Locked once campaign created.
-              </p>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Form
-              </label>
-              <select
-                name="formTemplateId"
-                defaultValue={campaign.formTemplateId ?? ""}
-                className="w-full px-3 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm"
-              >
-                <option value="">— None —</option>
-                {forms.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name}
-                  </option>
-                ))}
-              </select>
+            <div className="space-y-1.5">
+              <Label>Reminder rules</Label>
+              <RemindersEditor initial={reminderRules} templates={templates} />
             </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Invite message template
-              </label>
-              <select
-                name="inviteMessageTemplateId"
-                defaultValue={campaign.inviteMessageTemplateId ?? ""}
-                className="w-full px-3 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm"
-              >
-                <option value="">— None —</option>
-                {inviteTemplates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({t.code})
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
 
-          <div>
-            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300 block mb-2">
-              Reminder rules
-            </label>
-            <RemindersEditor initial={reminderRules} templates={templates} />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Max sends per day
-              </label>
-              <input
-                type="number"
-                name="maxSendsPerDay"
-                defaultValue={
-                  (campaign.throttle as { maxSendsPerDay?: number } | null)
-                    ?.maxSendsPerDay ?? 100
-                }
-                className="w-full px-3 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="maxSendsPerDay">Max sends per day</Label>
+                <Input
+                  id="maxSendsPerDay"
+                  type="number"
+                  name="maxSendsPerDay"
+                  defaultValue={
+                    (campaign.throttle as { maxSendsPerDay?: number } | null)
+                      ?.maxSendsPerDay ?? 100
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="maxSendsPerProvider">
+                  Max sends per provider
+                </Label>
+                <Input
+                  id="maxSendsPerProvider"
+                  type="number"
+                  name="maxSendsPerProvider"
+                  defaultValue={
+                    (
+                      campaign.throttle as {
+                        maxSendsPerProvider?: number;
+                      } | null
+                    )?.maxSendsPerProvider ?? 4
+                  }
+                />
+              </div>
             </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Max sends per provider
-              </label>
-              <input
-                type="number"
-                name="maxSendsPerProvider"
-                defaultValue={
-                  (campaign.throttle as { maxSendsPerProvider?: number } | null)
-                    ?.maxSendsPerProvider ?? 4
-                }
-                className="w-full px-3 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm"
-              />
-            </div>
-          </div>
 
-          <button
-            type="submit"
-            className="px-4 py-2 rounded-md bg-zinc-900 dark:bg-zinc-50 text-white dark:text-zinc-900 text-sm font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200"
-          >
-            Save settings
-          </button>
-        </form>
-      </section>
+            <Button type="submit">Save settings</Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function CampaignStatusBadge({ status }: { status: string }) {
+  if (status === "RUNNING")
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-success">
+        <span className="size-1.5 rounded-full bg-success animate-pulse" />
+        Running
+      </span>
+    );
+  const variant =
+    status === "COMPLETED"
+      ? "secondary"
+      : status === "PAUSED"
+        ? "outline"
+        : "outline";
   return (
-    <div className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-      <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-        {label}
-      </div>
-      <div className="text-xl font-semibold text-zinc-900 dark:text-zinc-50 mt-0.5">
-        {value}
-      </div>
-    </div>
+    <Badge variant={variant} className="text-[10px] uppercase tracking-wide">
+      {status}
+    </Badge>
   );
+}
+
+function relTime(d: Date): string {
+  const diff = Date.now() - new Date(d).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const days = Math.floor(h / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(d).toLocaleDateString();
 }
