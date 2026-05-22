@@ -18,7 +18,9 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen flex bg-background text-foreground">
+    // h-screen + overflow-hidden on the outer container locks viewport;
+    // sidebar and content area each manage their own scroll independently.
+    <div className="h-screen flex bg-background text-foreground overflow-hidden">
       <AdminSidebar
         user={{
           name: session.user.name,
@@ -27,9 +29,9 @@ export default async function AdminLayout({
         }}
         onSignOut={handleSignOut}
       />
-      <div className="flex-1 min-w-0 flex flex-col">
+      <div className="flex-1 min-w-0 flex flex-col h-full">
         <AdminTopbar />
-        <main className="flex-1 min-w-0">{children}</main>
+        <main className="flex-1 min-w-0 overflow-y-auto">{children}</main>
       </div>
       <Toaster position="top-right" richColors />
     </div>
