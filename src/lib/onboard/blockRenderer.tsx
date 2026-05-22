@@ -38,12 +38,14 @@ export function renderSection({
   values,
   context,
   lockedAttributeKeys,
+  fieldErrors,
 }: {
   section: FormSection;
   attrById: Map<string, Attribute>;
   values: Record<string, unknown>;
   context: Record<string, unknown>;
   lockedAttributeKeys?: Set<string>;
+  fieldErrors?: Map<string, string>;
 }) {
   // A section is "required" if any of its ATTRIBUTE blocks is required —
   // either via the block's own isRequired flag or via the attribute's
@@ -76,20 +78,49 @@ export function renderSection({
         )}
       </header>
       <div className="space-y-4">
-        {section.blocks.map((block, i) => (
-          <div key={i}>
-            {renderBlock({
-              block,
-              attrById,
-              values,
-              context,
-              lockedAttributeKeys,
-            })}
-          </div>
-        ))}
+        {section.blocks.map((block, i) => {
+          const attrKey =
+            block.type === "ATTRIBUTE" ? attrById.get(block.attributeId)?.key : null;
+          const fieldErr = attrKey ? fieldErrors?.get(attrKey) : undefined;
+          return (
+            <div
+              key={i}
+              id={attrKey ? `field-${attrKey}` : undefined}
+              data-field-error={fieldErr ? "true" : undefined}
+              className={
+                fieldErr
+                  ? "rounded-lg border border-red-300 bg-red-50/40 p-3 -m-3 scroll-mt-24"
+                  : undefined
+              }
+            >
+              {renderBlock({
+                block,
+                attrById,
+                values,
+                context,
+                lockedAttributeKeys,
+              })}
+              {fieldErr && (
+                <p className="mt-1.5 text-xs text-red-700 font-medium">
+                  {prettifyFieldError(fieldErr)}
+                </p>
+              )}
+            </div>
+          );
+        })}
       </div>
     </section>
   );
+}
+
+function prettifyFieldError(err: string): string {
+  const lower = err.toLowerCase().trim();
+  if (lower === "required") return "This field is required.";
+  if (lower.startsWith("pick at least")) return err.replace(/^pick/, "Pick");
+  if (lower.startsWith("at most")) return `Too many selections — ${err}`;
+  if (lower.includes("regex") || lower.includes("invalid format"))
+    return "This doesn't look like a valid value.";
+  return err.charAt(0).toUpperCase() + err.slice(1);
 }
 
 function renderBlock({

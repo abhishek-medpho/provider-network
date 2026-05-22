@@ -8,6 +8,30 @@ import {
 } from "@/lib/actions/onboard";
 import type { FormSection, FormAction } from "@/lib/types/form";
 import { SubmitButton } from "@/components/onboard/SubmitButton";
+import { ScrollToFirstError } from "@/components/onboard/ScrollToFirstError";
+
+/**
+ * Parse a server-side validation error message back into a per-field map.
+ * submitOnboarding throws errors like:
+ *   "Validation failed — selfie: required; nurse_procedures: pick at least 3"
+ * We re-derive { selfie: "required", nurse_procedures: "pick at least 3" }
+ * so the renderer can paint specific blocks red and the scroll helper can
+ * land the viewport on the first one.
+ */
+function parseFieldErrors(error: string | undefined): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!error) return map;
+  const decoded = decodeURIComponent(error);
+  const prefix = "Validation failed —";
+  if (!decoded.startsWith(prefix)) return map;
+  const body = decoded.slice(prefix.length).trim();
+  for (const part of body.split(";")) {
+    const [k, ...rest] = part.split(":");
+    if (!k || rest.length === 0) continue;
+    map.set(k.trim(), rest.join(":").trim());
+  }
+  return map;
+}
 
 export const metadata: Metadata = {
   title: "Labstack Provider — Complete your profile",
@@ -24,6 +48,7 @@ export default async function OnboardPage({
 }) {
   const { token } = await params;
   const { error } = await searchParams;
+  const fieldErrors = parseFieldErrors(error);
 
   const member = await prisma.campaignMember.findUnique({
     where: { token },
@@ -166,10 +191,40 @@ export default async function OnboardPage({
       </header>
 
       {error && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          <strong className="block mb-0.5">Couldn&apos;t submit:</strong>
-          {decodeURIComponent(error)}
-        </div>
+        <>
+          <ScrollToFirstError />
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <strong className="block mb-0.5">
+              {fieldErrors.size > 0
+                ? `Please fix ${fieldErrors.size} field${fieldErrors.size === 1 ? "" : "s"} below:`
+                : "Couldn't submit:"}
+            </strong>
+            {fieldErrors.size > 0 ? (
+              <ul className="mt-1 list-disc list-inside space-y-0.5">
+                {Array.from(fieldErrors.entries()).map(([key, msg]) => {
+                  const attr = Array.from(attrById.values()).find(
+                    (a) => a.key === key,
+                  );
+                  const label = attr?.label ?? key;
+                  return (
+                    <li key={key}>
+                      <a
+                        href={`#field-${key}`}
+                        className="underline hover:text-red-900"
+                      >
+                        {label}
+                      </a>
+                      {": "}
+                      {msg}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              decodeURIComponent(error)
+            )}
+          </div>
+        </>
       )}
 
       <form action={action} className="space-y-4">
@@ -180,6 +235,7 @@ export default async function OnboardPage({
             values,
             context,
             lockedAttributeKeys,
+            fieldErrors,
           }),
         )}
 
