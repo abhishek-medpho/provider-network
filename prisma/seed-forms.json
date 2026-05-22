@@ -1,0 +1,363 @@
+[
+  {
+    "id": "cmpf_demo_invite",
+    "name": "Nurse onboarding — Invite",
+    "purpose": "ONBOARDING",
+    "profileTypeCode": "NURSE",
+    "layout": "ONE_PER_SCREEN",
+    "status": "DRAFT",
+    "version": 1,
+    "sections": [
+      {
+        "key": "basics",
+        "title": "About you",
+        "blocks": []
+      }
+    ],
+    "actions": [
+      {
+        "key": "submit",
+        "kind": "SUBMIT",
+        "label": "Submit",
+        "style": "PRIMARY"
+      }
+    ],
+    "submitParts": null
+  },
+  {
+    "id": "cmpf_demo_confirm",
+    "name": "Appointment confirmation",
+    "purpose": "APPOINTMENT_CONFIRM",
+    "profileTypeCode": null,
+    "layout": "ONE_PER_SCREEN",
+    "status": "DRAFT",
+    "version": 1,
+    "sections": [
+      {
+        "key": "patient",
+        "title": "Patient details",
+        "blocks": [
+          {
+            "type": "DISPLAY",
+            "label": "Patient name",
+            "contextPath": "patient.name"
+          },
+          {
+            "type": "DISPLAY",
+            "label": "Address",
+            "format": "address",
+            "contextPath": "patient.address"
+          },
+          {
+            "type": "DISPLAY",
+            "label": "Contact",
+            "format": "phone",
+            "contextPath": "patient.phone"
+          }
+        ]
+      },
+      {
+        "key": "appointment",
+        "title": "Appointment",
+        "blocks": [
+          {
+            "type": "DISPLAY",
+            "label": "Date & time",
+            "format": "datetime",
+            "contextPath": "appointment.scheduled_at"
+          },
+          {
+            "type": "DISPLAY",
+            "label": "Service type",
+            "contextPath": "order.service_type"
+          },
+          {
+            "text": "Tap Accept to confirm, or Can't make it to release the order.",
+            "type": "INFO"
+          }
+        ]
+      }
+    ],
+    "actions": [
+      {
+        "key": "accept",
+        "kind": "ACCEPT",
+        "label": "Accept order",
+        "style": "PRIMARY"
+      },
+      {
+        "key": "decline",
+        "kind": "DECLINE",
+        "label": "Can't make it",
+        "style": "DANGER"
+      }
+    ],
+    "submitParts": null
+  },
+  {
+    "id": "cmpf_demo_exec",
+    "name": "During appointment — vitals & notes",
+    "purpose": "APPOINTMENT_EXECUTION",
+    "profileTypeCode": "NURSE",
+    "layout": "ONE_PER_SCREEN",
+    "status": "DRAFT",
+    "version": 1,
+    "sections": [
+      {
+        "key": "patient_context",
+        "title": "Patient",
+        "blocks": [
+          {
+            "type": "DISPLAY",
+            "label": "Name",
+            "contextPath": "patient.name"
+          },
+          {
+            "type": "DISPLAY",
+            "label": "Age / Gender",
+            "contextPath": "patient.age_gender"
+          }
+        ]
+      },
+      {
+        "key": "vitals",
+        "title": "Vitals",
+        "blocks": [
+          {
+            "text": "Capture observed vitals. Required fields are starred.",
+            "type": "INFO"
+          }
+        ]
+      },
+      {
+        "key": "notes",
+        "title": "Notes",
+        "blocks": []
+      }
+    ],
+    "actions": [
+      {
+        "key": "complete",
+        "kind": "COMPLETE",
+        "label": "Mark complete",
+        "style": "PRIMARY"
+      }
+    ],
+    "submitParts": null
+  },
+  {
+    "id": "cmpfcsadc00019k8hnemrbndu",
+    "name": "Labstack — Nurse Onboarding",
+    "purpose": "ONBOARDING",
+    "profileTypeCode": "NURSE",
+    "layout": "ONE_PER_SCREEN",
+    "status": "DRAFT",
+    "version": 1,
+    "sections": [
+      {
+        "key": "about_you",
+        "title": "About you",
+        "blocks": [
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "full_name"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "phone"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "gender"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "date_of_birth"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "selfie"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "alternate_phone"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "email"
+          }
+        ],
+        "description": "Basic identity. Takes ~1 minute."
+      },
+      {
+        "key": "qualifications",
+        "title": "Qualifications & experience",
+        "blocks": [
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "nurse_qualification"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "nurse_council_reg_state"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "nurse_council_reg_number"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "years_experience"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "current_employment"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "current_employer"
+          }
+        ]
+      },
+      {
+        "key": "skills",
+        "title": "Skills & specializations",
+        "blocks": [
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "nurse_procedures"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "nurse_specializations"
+          }
+        ],
+        "description": "Tell us what you're comfortable doing. We'll only send jobs that match."
+      },
+      {
+        "key": "languages",
+        "title": "Languages",
+        "blocks": [
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "languages_spoken"
+          }
+        ]
+      },
+      {
+        "key": "where",
+        "title": "Where you can work",
+        "blocks": [
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "pincode_home"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "home_location"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "service_radius_km"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "transport_mode"
+          }
+        ],
+        "description": "We match you to nearby jobs based on your home pincode and travel radius."
+      },
+      {
+        "key": "when",
+        "title": "When you can work",
+        "blocks": [
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "days_available"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "time_slots"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "same_day_jobs"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "nurse_service_types"
+          }
+        ]
+      },
+      {
+        "key": "pay",
+        "title": "Pay expectations",
+        "blocks": [
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "rate_per_visit"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "rate_per_shift_12hr"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "rate_per_livein_24hr"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "rate_per_month"
+          }
+        ],
+        "description": "Optional. Helps us match you to the right opportunities."
+      },
+      {
+        "key": "emergency",
+        "title": "Emergency contact",
+        "blocks": [
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "emergency_contact_name"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "emergency_contact_phone"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "emergency_contact_relation"
+          }
+        ]
+      },
+      {
+        "key": "verification",
+        "title": "Verification",
+        "blocks": [
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "aadhaar_front"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "aadhaar_back"
+          },
+          {
+            "type": "ATTRIBUTE",
+            "attributeKey": "qualification_cert"
+          }
+        ],
+        "description": "Documents stay private and are only seen by our verification team."
+      }
+    ],
+    "actions": [
+      {
+        "key": "submit",
+        "kind": "SUBMIT",
+        "label": "Submit",
+        "style": "PRIMARY"
+      }
+    ],
+    "submitParts": null
+  }
+]

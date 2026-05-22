@@ -1,0 +1,16 @@
+[
+  {
+    "id": "cmpf_camp_labstack_nurse",
+    "name": "Labstack — Nurse Drive",
+    "profileTypeCode": "NURSE",
+    "formTemplateId": "cmpfcsadc00019k8hnemrbndu",
+    "inviteMessageTemplateCode": "invite_generic",
+    "status": "DRAFT",
+    "stopConditions": ["status>=VERIFIED", "optedOut=true"],
+    "throttle": {
+      "maxSendsPerDay": 100,
+      "maxSendsPerProvider": 4
+    },
+    "reminderRules": []
+  }
+]

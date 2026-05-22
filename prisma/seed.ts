@@ -8,6 +8,8 @@
  */
 import { PrismaClient, AttributeType, PiiLevel, Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 const prisma = new PrismaClient();
 
@@ -1165,7 +1167,13 @@ async function main() {
     });
   }
 
-  // 4) Bootstrap super admin from ADMIN_EMAIL + ADMIN_PASSWORD
+  // 4) Form templates (read from prisma/seed-forms.json)
+  await seedForms();
+
+  // 5) Campaigns (read from prisma/seed-campaigns.json)
+  await seedCampaigns();
+
+  // 6) Bootstrap super admin from ADMIN_EMAIL + ADMIN_PASSWORD
   const adminEmail = (process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
   const adminPassword = process.env.ADMIN_PASSWORD ?? "";
   const adminName = process.env.ADMIN_NAME ?? null;
@@ -1212,6 +1220,191 @@ async function main() {
   }
 
   console.log("✅ Seed complete.");
+}
+
+// ============================================================================
+// Form templates (loaded from prisma/seed-forms.json)
+// ============================================================================
+
+type SeedFormBlock =
+  | { type: "ATTRIBUTE"; attributeKey: string; isRequired?: boolean; overrideLabel?: string }
+  | { type: "DISPLAY"; label: string; contextPath: string; helpText?: string }
+  | { type: "INFO"; text: string }
+  | { type: "HEADING"; text: string };
+
+type SeedFormSection = {
+  key: string;
+  title?: string;
+  description?: string;
+  blocks: SeedFormBlock[];
+};
+
+type SeedForm = {
+  id: string;
+  name: string;
+  purpose: string;
+  profileTypeCode: string | null;
+  layout: string;
+  status: string;
+  version: number;
+  sections: SeedFormSection[];
+  actions: unknown;
+  submitParts: unknown;
+};
+
+async function seedForms() {
+  const file = path.join(__dirname, "seed-forms.json");
+  if (!fs.existsSync(file)) {
+    console.log("  • No prisma/seed-forms.json — skipping form templates");
+    return;
+  }
+  const forms: SeedForm[] = JSON.parse(fs.readFileSync(file, "utf8"));
+  console.log(`  • Upserting ${forms.length} form templates`);
+
+  // Resolve attribute keys -> current IDs
+  const attrs = await prisma.attribute.findMany({ select: { id: true, key: true } });
+  const attrIdByKey = new Map(attrs.map((a) => [a.key, a.id]));
+
+  // Resolve profile type codes -> current IDs
+  const pts = await prisma.profileType.findMany({ select: { id: true, code: true } });
+  const ptIdByCode = new Map(pts.map((p) => [p.code, p.id]));
+
+  for (const f of forms) {
+    // Rewrite attributeKey -> attributeId for current DB
+    const sections = f.sections.map((s) => ({
+      ...s,
+      blocks: s.blocks.map((b) => {
+        if (b.type === "ATTRIBUTE") {
+          const id = attrIdByKey.get(b.attributeKey);
+          if (!id) {
+            console.warn(`    ⚠ form ${f.name}: attribute key '${b.attributeKey}' not found — block skipped`);
+            return null;
+          }
+          const { attributeKey: _k, ...rest } = b;
+          return { ...rest, attributeId: id };
+        }
+        return b;
+      }).filter(Boolean),
+    }));
+
+    const profileTypeId = f.profileTypeCode ? ptIdByCode.get(f.profileTypeCode) ?? null : null;
+
+    await prisma.formTemplate.upsert({
+      where: { id: f.id },
+      update: {
+        name: f.name,
+        purpose: f.purpose as never,
+        profileTypeId,
+        layout: f.layout,
+        sections: sections as Prisma.InputJsonValue,
+        actions: f.actions ? (f.actions as Prisma.InputJsonValue) : Prisma.JsonNull,
+        submitParts: f.submitParts ? (f.submitParts as Prisma.InputJsonValue) : Prisma.JsonNull,
+      },
+      create: {
+        id: f.id,
+        name: f.name,
+        purpose: f.purpose as never,
+        profileTypeId,
+        layout: f.layout,
+        status: f.status as never,
+        version: f.version,
+        sections: sections as Prisma.InputJsonValue,
+        actions: f.actions ? (f.actions as Prisma.InputJsonValue) : Prisma.JsonNull,
+        submitParts: f.submitParts ? (f.submitParts as Prisma.InputJsonValue) : Prisma.JsonNull,
+      },
+    });
+  }
+}
+
+// ============================================================================
+// Campaigns (loaded from prisma/seed-campaigns.json)
+// ============================================================================
+
+type SeedCampaign = {
+  id: string;
+  name: string;
+  profileTypeCode: string;
+  formTemplateId: string | null;
+  inviteMessageTemplateCode: string | null;
+  status: string;
+  stopConditions?: unknown;
+  throttle?: unknown;
+  reminderRules?: unknown;
+};
+
+async function seedCampaigns() {
+  const file = path.join(__dirname, "seed-campaigns.json");
+  if (!fs.existsSync(file)) {
+    console.log("  • No prisma/seed-campaigns.json — skipping campaigns");
+    return;
+  }
+  const campaigns: SeedCampaign[] = JSON.parse(fs.readFileSync(file, "utf8"));
+  console.log(`  • Upserting ${campaigns.length} campaigns`);
+
+  for (const c of campaigns) {
+    const profileType = await prisma.profileType.findUnique({
+      where: { code: c.profileTypeCode },
+      select: { id: true },
+    });
+    if (!profileType) {
+      console.warn(`    ⚠ campaign ${c.name}: profile type '${c.profileTypeCode}' not found — skipped`);
+      continue;
+    }
+
+    const inviteTpl = c.inviteMessageTemplateCode
+      ? await prisma.messageTemplate.findUnique({
+          where: {
+            code_language: { code: c.inviteMessageTemplateCode, language: "en" },
+          },
+          select: { id: true },
+        })
+      : null;
+
+    // formTemplateId is a stable ID set by seedForms — verify it exists
+    const form = c.formTemplateId
+      ? await prisma.formTemplate.findUnique({
+          where: { id: c.formTemplateId },
+          select: { id: true },
+        })
+      : null;
+
+    await prisma.campaign.upsert({
+      where: { id: c.id },
+      update: {
+        name: c.name,
+        profileTypeId: profileType.id,
+        formTemplateId: form?.id ?? null,
+        inviteMessageTemplateId: inviteTpl?.id ?? null,
+        // Do NOT overwrite status on re-seed — admin may have launched it.
+        stopConditions: c.stopConditions
+          ? (c.stopConditions as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+        throttle: c.throttle
+          ? (c.throttle as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+        reminderRules: c.reminderRules
+          ? (c.reminderRules as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+      },
+      create: {
+        id: c.id,
+        name: c.name,
+        profileTypeId: profileType.id,
+        formTemplateId: form?.id ?? null,
+        inviteMessageTemplateId: inviteTpl?.id ?? null,
+        status: c.status as never,
+        stopConditions: c.stopConditions
+          ? (c.stopConditions as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+        throttle: c.throttle
+          ? (c.throttle as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+        reminderRules: c.reminderRules
+          ? (c.reminderRules as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+      },
+    });
+  }
 }
 
 main()
