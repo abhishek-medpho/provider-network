@@ -16,7 +16,7 @@ const UPLOAD_ROOT =
   process.env.STORAGE_LOCAL_ROOT ??
   join(process.cwd(), "uploads");
 
-const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB — modern phone photos can hit 5-8 MB easily.
 
 const ALLOWED_IMAGE_TYPES = new Set([
   "image/jpeg",
