@@ -8,6 +8,19 @@ import {
 } from "@/lib/actions/attributes";
 import OptionsEditor from "../_components/OptionsEditor";
 import Link from "next/link";
+import { ChevronLeft, Archive, RotateCcw } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type Option = { value: string; label: string };
 
@@ -43,159 +56,171 @@ export default async function AttributeDetailPage({
     "use server";
     await updateAttribute(id, formData);
   }
-
   async function archiveAction() {
     "use server";
     await archiveAttribute(id);
   }
-
   async function restoreAction() {
     "use server";
     await restoreAttribute(id);
   }
 
   return (
-    <div className="px-8 py-8 max-w-3xl">
-      <Link
-        href="/admin/attributes"
-        className="text-sm text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-50 mb-4 inline-block"
-      >
-        ← All attributes
-      </Link>
+    <div className="p-6 md:p-8 space-y-5 max-w-3xl">
+      <Button variant="ghost" size="sm" asChild className="-ml-2">
+        <Link href="/admin/attributes">
+          <ChevronLeft className="size-4" />
+          All attributes
+        </Link>
+      </Button>
 
-      <header className="mb-6">
-        <div className="flex items-center gap-2 mb-1">
-          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-            {attr.label}
-          </h1>
+      <header>
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
+          <h1 className="text-2xl font-semibold tracking-tight">{attr.label}</h1>
           {attr.isSystem && (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+            <Badge variant="outline" className="text-[10px]">
               system
-            </span>
+            </Badge>
           )}
           {attr.archivedAt && (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400">
+            <Badge variant="outline" className="text-[10px] text-warning border-warning/40">
               archived
-            </span>
+            </Badge>
           )}
         </div>
-        <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
-          {attr.key}
-        </p>
+        <p className="font-mono text-xs text-muted-foreground">{attr.key}</p>
       </header>
 
-      <form action={saveAction} className="space-y-6">
-        <Section title="Basics">
-          <Field label="Label" name="label" defaultValue={attr.label} required />
-          <Field
-            label="Help text"
-            name="helpText"
-            defaultValue={attr.helpText ?? ""}
-            placeholder="Optional context shown below the input"
-          />
-          <Field
-            label="Category"
-            name="category"
-            defaultValue={attr.category ?? ""}
-            placeholder="e.g. identity, skills, commercials"
-          />
-        </Section>
+      <form action={saveAction} className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Basics</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Field
+              label="Label"
+              name="label"
+              defaultValue={attr.label}
+              required
+            />
+            <Field
+              label="Help text"
+              name="helpText"
+              defaultValue={attr.helpText ?? ""}
+              placeholder="Optional context shown below the input"
+            />
+            <Field
+              label="Category"
+              name="category"
+              defaultValue={attr.category ?? ""}
+              placeholder="e.g. identity, skills, commercials"
+            />
+          </CardContent>
+        </Card>
 
-        <Section title="Type & options">
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Type
-            </label>
-            <select
-              name="type"
-              defaultValue={attr.type}
-              disabled={attr.isSystem}
-              className="w-full px-3 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {Object.keys(AttributeType).map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-            {attr.isSystem && (
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                System attribute — type is locked.
-              </p>
-            )}
-          </div>
-
-          {TYPES_WITH_OPTIONS.includes(attr.type) && (
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Options
-              </label>
-              <OptionsEditor initial={options} />
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Type & options</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="type">Type</Label>
+              <select
+                id="type"
+                name="type"
+                defaultValue={attr.type}
+                disabled={attr.isSystem}
+                className="w-full h-9 px-3 rounded-md border bg-background text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {Object.keys(AttributeType).map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+              {attr.isSystem && (
+                <p className="text-xs text-muted-foreground">
+                  System attribute — type is locked.
+                </p>
+              )}
             </div>
-          )}
-        </Section>
+            {TYPES_WITH_OPTIONS.includes(attr.type) && (
+              <div className="space-y-1.5">
+                <Label>Options</Label>
+                <OptionsEditor initial={options} />
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-        <Section title="Validation">
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex items-center gap-2 text-sm col-span-2">
-              <input
-                type="checkbox"
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Validation</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
                 name="validation_required"
+                id="validation_required"
                 defaultChecked={validation.required === true}
               />
-              Required
+              <span>Required</span>
             </label>
-            <Field
-              label="Min (number or string length)"
-              name="validation_min"
-              defaultValue={(validation.min as number | undefined) ?? ""}
-              type="number"
-            />
-            <Field
-              label="Max"
-              name="validation_max"
-              defaultValue={(validation.max as number | undefined) ?? ""}
-              type="number"
-            />
-            <Field
-              label="Min items (multi-select)"
-              name="validation_minItems"
-              defaultValue={(validation.minItems as number | undefined) ?? ""}
-              type="number"
-            />
-            <Field
-              label="Max items"
-              name="validation_maxItems"
-              defaultValue={(validation.maxItems as number | undefined) ?? ""}
-              type="number"
-            />
-            <Field
-              label="Regex"
-              name="validation_regex"
-              defaultValue={(validation.regex as string | undefined) ?? ""}
-              placeholder="^[0-9]{6}$"
-            />
-            <Field
-              label="File max KB"
-              name="validation_fileMaxKb"
-              defaultValue={
-                (validation.fileMaxKb as number | undefined) ?? ""
-              }
-              type="number"
-            />
-          </div>
-        </Section>
+            <div className="grid grid-cols-2 gap-3">
+              <Field
+                label="Min (number or string length)"
+                name="validation_min"
+                defaultValue={(validation.min as number | undefined) ?? ""}
+                type="number"
+              />
+              <Field
+                label="Max"
+                name="validation_max"
+                defaultValue={(validation.max as number | undefined) ?? ""}
+                type="number"
+              />
+              <Field
+                label="Min items (multi-select)"
+                name="validation_minItems"
+                defaultValue={(validation.minItems as number | undefined) ?? ""}
+                type="number"
+              />
+              <Field
+                label="Max items"
+                name="validation_maxItems"
+                defaultValue={(validation.maxItems as number | undefined) ?? ""}
+                type="number"
+              />
+              <Field
+                label="Regex"
+                name="validation_regex"
+                defaultValue={(validation.regex as string | undefined) ?? ""}
+                placeholder="^[0-9]{6}$"
+              />
+              <Field
+                label="File max KB"
+                name="validation_fileMaxKb"
+                defaultValue={
+                  (validation.fileMaxKb as number | undefined) ?? ""
+                }
+                type="number"
+              />
+            </div>
+          </CardContent>
+        </Card>
 
-        <Section title="Privacy & search">
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                PII Level
-              </label>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Privacy & search</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="piiLevel">PII Level</Label>
               <select
+                id="piiLevel"
                 name="piiLevel"
                 defaultValue={attr.piiLevel}
-                className="w-full px-3 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm"
+                className="w-full h-9 px-3 rounded-md border bg-background text-sm"
               >
                 {Object.keys(PiiLevel).map((p) => (
                   <option key={p} value={p}>
@@ -203,110 +228,95 @@ export default async function AttributeDetailPage({
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="text-xs text-muted-foreground">
                 Higher PII = masked in admin UI, requires audit on access.
               </p>
             </div>
             <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
+              <Checkbox
                 name="isSearchable"
+                id="isSearchable"
                 defaultChecked={attr.isSearchable}
               />
-              Indexed for search (use sparingly)
+              <span>Indexed for search (use sparingly)</span>
             </label>
-          </div>
-        </Section>
+          </CardContent>
+        </Card>
 
-        <div className="flex gap-3 pt-2">
-          <button
-            type="submit"
-            className="px-4 py-2 rounded-md bg-zinc-900 dark:bg-zinc-50 text-white dark:text-zinc-900 text-sm font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200"
-          >
-            Save changes
-          </button>
-          <Link
-            href="/admin/attributes"
-            className="px-4 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800"
-          >
-            Cancel
-          </Link>
+        <div className="flex gap-2">
+          <Button type="submit">Save changes</Button>
+          <Button variant="outline" asChild>
+            <Link href="/admin/attributes">Cancel</Link>
+          </Button>
         </div>
       </form>
 
-      <Section title="Used in" className="mt-10">
-        {attr.profileTypeAttrs.length === 0 && (
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Not assigned to any profile type yet.
-          </p>
-        )}
-        {attr.profileTypeAttrs.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {attr.profileTypeAttrs.map((b) => (
-              <span
-                key={b.id}
-                className={`text-xs px-2 py-1 rounded ${
-                  b.isRequired
-                    ? "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400"
-                    : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
-                }`}
-              >
-                {b.profileType.label}
-                {b.isRequired && " *"}
-                <span className="text-zinc-400 ml-1">[{b.sectionKey}]</span>
-              </span>
-            ))}
-          </div>
-        )}
-      </Section>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Used in</CardTitle>
+          <CardDescription>
+            Profile types that bundle this attribute into their form.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {attr.profileTypeAttrs.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Not assigned to any profile type yet.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {attr.profileTypeAttrs.map((b) => (
+                <Badge
+                  key={b.id}
+                  variant={b.isRequired ? "destructive" : "secondary"}
+                  className="text-[10px]"
+                >
+                  {b.profileType.label}
+                  {b.isRequired && " *"}
+                  <span className="opacity-60 ml-1">[{b.sectionKey}]</span>
+                </Badge>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {!attr.isSystem && (
-        <Section title="Danger zone" className="mt-10">
-          {attr.archivedAt ? (
-            <form action={restoreAction}>
-              <button
-                type="submit"
-                className="px-4 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800"
-              >
-                Restore
-              </button>
-            </form>
-          ) : (
-            <form action={archiveAction}>
-              <button
-                type="submit"
-                className="px-4 py-2 rounded-md border border-red-200 dark:border-red-900 text-red-700 dark:text-red-400 text-sm font-medium hover:bg-red-50 dark:hover:bg-red-950/40"
-              >
-                Archive attribute
-              </button>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2">
-                Archived attributes are hidden from forms and the default list.
-                Existing data is preserved. Can be restored later.
-              </p>
-            </form>
-          )}
-        </Section>
+        <Card className="border-destructive/30">
+          <CardHeader>
+            <CardTitle className="text-sm text-destructive">
+              Danger zone
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {attr.archivedAt ? (
+              <form action={restoreAction}>
+                <Button type="submit" variant="outline" size="sm">
+                  <RotateCcw className="size-3.5" />
+                  Restore
+                </Button>
+              </form>
+            ) : (
+              <form action={archiveAction} className="space-y-2">
+                <Button
+                  type="submit"
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <Archive className="size-3.5" />
+                  Archive attribute
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Archived attributes are hidden from forms and the default
+                  list. Existing data is preserved. Can be restored later.
+                </p>
+              </form>
+            )}
+          </CardContent>
+        </Card>
       )}
     </div>
-  );
-}
-
-function Section({
-  title,
-  children,
-  className,
-}: {
-  title: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <section
-      className={`rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 space-y-4 ${className ?? ""}`}
-    >
-      <h2 className="font-medium text-zinc-900 dark:text-zinc-50">{title}</h2>
-      {children}
-    </section>
   );
 }
 
@@ -326,22 +336,18 @@ function Field({
   type?: string;
 }) {
   return (
-    <div className="space-y-1">
-      <label
-        htmlFor={name}
-        className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
-      >
+    <div className="space-y-1.5">
+      <Label htmlFor={name}>
         {label}
-        {required && <span className="text-red-500 ml-0.5">*</span>}
-      </label>
-      <input
+        {required && <span className="text-destructive ml-0.5">*</span>}
+      </Label>
+      <Input
         id={name}
         name={name}
         type={type}
         defaultValue={defaultValue ?? ""}
         placeholder={placeholder}
         required={required}
-        className="w-full px-3 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm"
       />
     </div>
   );

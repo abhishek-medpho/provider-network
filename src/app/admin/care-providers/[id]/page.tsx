@@ -1,37 +1,45 @@
 import { prisma } from "@/lib/db";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { CareProviderStatus } from "@prisma/client";
 import { setCareProviderStatus } from "@/lib/actions/care-providers";
+import {
+  ChevronLeft,
+  Phone,
+  Mail,
+  MapPin,
+  Calendar,
+  ExternalLink,
+  Inbox,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+} from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Separator } from "@/components/ui/separator";
 
-const STATUS_COLORS: Record<string, string> = {
-  LEAD: "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400",
-  ENGAGED: "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400",
-  PROFILED:
-    "bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-400",
-  PENDING_VERIFICATION:
-    "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400",
-  VERIFIED:
-    "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400",
-  ACTIVE:
-    "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400",
-  PAUSED: "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400",
-  BLOCKED: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400",
-  OPTED_OUT: "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400",
-  REJECTED: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400",
-};
-
-const MEMBER_STATUS_COLORS: Record<string, string> = {
-  PENDING: "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400",
-  SENT: "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400",
-  ENGAGED:
-    "bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-400",
-  SUBMITTED:
-    "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400",
-  COMPLETED:
-    "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400",
-  OPTED_OUT: "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400",
-  FAILED: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400",
+const STATUS_VARIANT: Record<
+  string,
+  "default" | "secondary" | "destructive" | "outline"
+> = {
+  LEAD: "outline",
+  ENGAGED: "secondary",
+  PROFILED: "secondary",
+  PENDING_VERIFICATION: "secondary",
+  VERIFIED: "default",
+  ACTIVE: "default",
+  PAUSED: "outline",
+  BLOCKED: "destructive",
+  OPTED_OUT: "outline",
+  REJECTED: "destructive",
 };
 
 const EVENT_LABELS: Record<string, string> = {
@@ -40,6 +48,20 @@ const EVENT_LABELS: Record<string, string> = {
   INVITE_SENT: "Invite sent",
   STATUS_CHANGED: "Status changed",
   MESSAGE_SENT: "Message sent",
+  REMINDER_SENT: "Reminder sent",
+};
+
+const NEXT_STATUSES: Record<string, string[]> = {
+  LEAD: ["ENGAGED", "BLOCKED", "OPTED_OUT"],
+  ENGAGED: ["PROFILED", "BLOCKED", "OPTED_OUT"],
+  PROFILED: ["PENDING_VERIFICATION", "VERIFIED", "REJECTED"],
+  PENDING_VERIFICATION: ["VERIFIED", "REJECTED"],
+  VERIFIED: ["ACTIVE", "PAUSED", "BLOCKED"],
+  ACTIVE: ["PAUSED", "BLOCKED"],
+  PAUSED: ["ACTIVE", "BLOCKED"],
+  BLOCKED: ["LEAD"],
+  OPTED_OUT: [],
+  REJECTED: ["LEAD"],
 };
 
 type Option = { value: string; label: string };
@@ -62,36 +84,25 @@ export default async function CareProviderDetailPage({
         },
         orderBy: { createdAt: "desc" },
       },
-      events: {
-        orderBy: { createdAt: "desc" },
-        take: 50,
-      },
+      events: { orderBy: { createdAt: "desc" }, take: 50 },
       whatsappMessages: {
         orderBy: { createdAt: "desc" },
         take: 20,
         include: { messageTemplate: { select: { name: true, code: true } } },
       },
-      formResponses: {
-        orderBy: { createdAt: "desc" },
-        take: 10,
-      },
+      formResponses: { orderBy: { createdAt: "desc" }, take: 10 },
     },
   });
 
   if (!provider) notFound();
 
-  // Resolve attribute defs once for all keys present on this provider
-  const attrValues =
-    (provider.attributes as Record<string, unknown>) ?? {};
+  const attrValues = (provider.attributes as Record<string, unknown>) ?? {};
   const attrKeys = Object.keys(attrValues);
   const attrDefs = attrKeys.length
-    ? await prisma.attribute.findMany({
-        where: { key: { in: attrKeys } },
-      })
+    ? await prisma.attribute.findMany({ where: { key: { in: attrKeys } } })
     : [];
   const defByKey = new Map(attrDefs.map((a) => [a.key, a]));
 
-  // Group by category
   type Row = {
     key: string;
     label: string;
@@ -124,275 +135,348 @@ export default async function CareProviderDetailPage({
     await setCareProviderStatus(id, status, reason);
   }
 
-  const nextStatuses: Record<string, string[]> = {
-    LEAD: ["ENGAGED", "BLOCKED", "OPTED_OUT"],
-    ENGAGED: ["PROFILED", "BLOCKED", "OPTED_OUT"],
-    PROFILED: ["PENDING_VERIFICATION", "VERIFIED", "REJECTED"],
-    PENDING_VERIFICATION: ["VERIFIED", "REJECTED"],
-    VERIFIED: ["ACTIVE", "PAUSED", "BLOCKED"],
-    ACTIVE: ["PAUSED", "BLOCKED"],
-    PAUSED: ["ACTIVE", "BLOCKED"],
-    BLOCKED: ["LEAD"],
-    OPTED_OUT: [],
-    REJECTED: ["LEAD"],
-  };
+  const display = provider.name ?? provider.phone;
+  const initials = display
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((s) => s[0]?.toUpperCase())
+    .join("");
+
+  const transitions = NEXT_STATUSES[provider.status] ?? [];
 
   return (
-    <div className="px-8 py-8 max-w-5xl">
-      <Link
-        href="/admin/care-providers"
-        className="text-sm text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-50 mb-4 inline-block"
-      >
-        ← All care providers
-      </Link>
+    <div className="p-6 md:p-8 space-y-5 max-w-6xl">
+      {/* Back */}
+      <Button variant="ghost" size="sm" asChild className="-ml-2 mb-1">
+        <Link href="/admin/care-providers">
+          <ChevronLeft className="size-4" />
+          All care providers
+        </Link>
+      </Button>
 
-      <header className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-              {provider.name ?? "(no name)"}
+      {/* Header */}
+      <header className="flex items-start gap-4 flex-wrap">
+        <Avatar className="size-12">
+          <AvatarFallback className="text-base">{initials || "?"}</AvatarFallback>
+        </Avatar>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {provider.name ?? (
+                <span className="text-muted-foreground italic">Unnamed</span>
+              )}
             </h1>
-            <span
-              className={`text-xs uppercase tracking-wide px-1.5 py-0.5 rounded ${STATUS_COLORS[provider.status]}`}
+            <Badge
+              variant={STATUS_VARIANT[provider.status] ?? "outline"}
+              className="text-[10px] font-medium"
             >
               {provider.status}
-            </span>
+            </Badge>
           </div>
-          <div className="flex items-center gap-3 text-sm text-zinc-500 dark:text-zinc-400">
-            <span className="font-mono">{provider.phone}</span>
-            {provider.email && <span>· {provider.email}</span>}
+          <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1 flex-wrap">
+            <span className="flex items-center gap-1 font-mono">
+              <Phone className="size-3.5" />
+              {provider.phone}
+            </span>
+            {provider.email && (
+              <span className="flex items-center gap-1">
+                <Mail className="size-3.5" />
+                {provider.email}
+              </span>
+            )}
             {provider.profileType && (
-              <span>· {provider.profileType.label}</span>
+              <span className="flex items-center gap-1">
+                <Inbox className="size-3.5" />
+                {provider.profileType.label}
+              </span>
             )}
             {provider.pincodeHome && (
-              <span>· {provider.pincodeHome}</span>
+              <span className="flex items-center gap-1">
+                <MapPin className="size-3.5" />
+                {provider.pincodeHome}
+              </span>
             )}
           </div>
         </div>
       </header>
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Left: attributes (2/3) */}
-        <div className="lg:col-span-2 space-y-6">
+      <div className="grid lg:grid-cols-3 gap-5">
+        {/* Left: 2/3 */}
+        <div className="lg:col-span-2 space-y-5">
           {/* System */}
-          <section className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5">
-            <h2 className="font-medium text-zinc-900 dark:text-zinc-50 mb-3">
-              System
-            </h2>
-            <dl className="grid grid-cols-[140px_1fr] gap-y-2 text-sm">
-              <dt className="text-zinc-500 dark:text-zinc-400">Lead source</dt>
-              <dd className="text-zinc-900 dark:text-zinc-50">
-                {provider.leadBatch?.name ??
-                  provider.source ?? (
-                    <span className="text-zinc-400">—</span>
-                  )}
-              </dd>
-              <dt className="text-zinc-500 dark:text-zinc-400">Language</dt>
-              <dd className="text-zinc-900 dark:text-zinc-50">
-                {provider.language}
-              </dd>
-              <dt className="text-zinc-500 dark:text-zinc-400">Created</dt>
-              <dd className="text-zinc-900 dark:text-zinc-50">
-                {new Date(provider.createdAt).toLocaleString()}
-              </dd>
-              <dt className="text-zinc-500 dark:text-zinc-400">Last updated</dt>
-              <dd className="text-zinc-900 dark:text-zinc-50">
-                {new Date(provider.updatedAt).toLocaleString()}
-              </dd>
-              {provider.lastContactedAt && (
-                <>
-                  <dt className="text-zinc-500 dark:text-zinc-400">
-                    Last contacted
-                  </dt>
-                  <dd className="text-zinc-900 dark:text-zinc-50">
-                    {new Date(provider.lastContactedAt).toLocaleString()}
-                  </dd>
-                </>
-              )}
-              {provider.blockedReason && (
-                <>
-                  <dt className="text-zinc-500 dark:text-zinc-400">
-                    Blocked reason
-                  </dt>
-                  <dd className="text-red-700 dark:text-red-400">
-                    {provider.blockedReason}
-                  </dd>
-                </>
-              )}
-            </dl>
-          </section>
-
-          {/* Attributes grouped */}
-          {rows.length === 0 && (
-            <section className="rounded-lg border border-dashed border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-6 text-center">
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                No attribute data yet. Provider hasn&apos;t submitted any form.
-              </p>
-            </section>
-          )}
-          {Object.entries(grouped).map(([category, items]) => (
-            <section
-              key={category}
-              className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5"
-            >
-              <h2 className="font-medium text-zinc-900 dark:text-zinc-50 mb-3 capitalize">
-                {category}
-              </h2>
-              <dl className="grid grid-cols-[180px_1fr] gap-y-2.5 text-sm">
-                {items.map((r) => (
-                  <FieldRow key={r.key} row={r} defByKey={defByKey} />
-                ))}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">System</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <dl className="grid grid-cols-[140px_1fr] gap-y-2 text-sm">
+                <Label>Lead source</Label>
+                <Value>
+                  {provider.leadBatch?.name ?? provider.source ?? <Dash />}
+                </Value>
+                <Label>Language</Label>
+                <Value>{provider.language}</Value>
+                <Label>Created</Label>
+                <Value>
+                  {new Date(provider.createdAt).toLocaleString()}
+                </Value>
+                <Label>Last updated</Label>
+                <Value>
+                  {new Date(provider.updatedAt).toLocaleString()}
+                </Value>
+                {provider.lastContactedAt && (
+                  <>
+                    <Label>Last contacted</Label>
+                    <Value>
+                      {new Date(provider.lastContactedAt).toLocaleString()}
+                    </Value>
+                  </>
+                )}
+                {provider.blockedReason && (
+                  <>
+                    <Label>Blocked reason</Label>
+                    <dd className="text-destructive text-sm">
+                      {provider.blockedReason}
+                    </dd>
+                  </>
+                )}
               </dl>
-            </section>
-          ))}
+            </CardContent>
+          </Card>
+
+          {/* Attributes */}
+          {rows.length === 0 ? (
+            <Card>
+              <CardContent className="p-10 text-center">
+                <AlertCircle className="size-6 mx-auto text-muted-foreground mb-2" />
+                <p className="text-sm text-muted-foreground">
+                  No attribute data yet. Provider hasn&apos;t submitted any form.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            Object.entries(grouped).map(([category, items]) => (
+              <Card key={category}>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm capitalize">
+                    {category}
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    {items.length} field{items.length === 1 ? "" : "s"}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <dl className="grid grid-cols-[180px_1fr] gap-y-3 text-sm">
+                    {items.map((r) => (
+                      <FieldRow key={r.key} row={r} defByKey={defByKey} />
+                    ))}
+                  </dl>
+                </CardContent>
+              </Card>
+            ))
+          )}
         </div>
 
-        {/* Right: status, campaigns, events, messages */}
-        <aside className="space-y-6">
-          {/* Status changer */}
-          <section className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5">
-            <h2 className="font-medium text-zinc-900 dark:text-zinc-50 mb-3">
-              Change status
-            </h2>
-            {nextStatuses[provider.status]?.length === 0 ? (
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                No transitions available from {provider.status}.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {nextStatuses[provider.status]?.map((s) => (
+        {/* Right: 1/3 */}
+        <aside className="space-y-5">
+          {/* Change status */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">Change status</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {transitions.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No transitions available from {provider.status}.
+                </p>
+              ) : (
+                transitions.map((s) => (
                   <form key={s} action={statusAction}>
                     <input type="hidden" name="status" value={s} />
-                    <button
+                    <Button
                       type="submit"
-                      className="w-full px-3 py-1.5 rounded-md border border-zinc-300 dark:border-zinc-700 text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800 text-left"
+                      variant="outline"
+                      className="w-full justify-start font-normal"
+                      size="sm"
                     >
-                      →{" "}
-                      <span
-                        className={`text-xs uppercase tracking-wide px-1.5 py-0.5 rounded ${STATUS_COLORS[s]}`}
+                      → Move to
+                      <Badge
+                        variant={STATUS_VARIANT[s] ?? "outline"}
+                        className="text-[10px] ml-1"
                       >
                         {s}
-                      </span>
-                    </button>
+                      </Badge>
+                    </Button>
                   </form>
-                ))}
-              </div>
-            )}
-          </section>
+                ))
+              )}
+            </CardContent>
+          </Card>
 
-          {/* Campaign memberships */}
-          <section className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5">
-            <h2 className="font-medium text-zinc-900 dark:text-zinc-50 mb-3">
-              Campaigns ({provider.campaignMemberships.length})
-            </h2>
-            {provider.campaignMemberships.length === 0 ? (
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Not in any campaign.
-              </p>
-            ) : (
-              <ul className="space-y-2">
-                {provider.campaignMemberships.map((m) => (
-                  <li key={m.id} className="text-sm">
+          {/* Campaigns */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">
+                Campaigns ({provider.campaignMemberships.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {provider.campaignMemberships.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Not in any campaign.
+                </p>
+              ) : (
+                provider.campaignMemberships.map((m) => (
+                  <div key={m.id} className="text-sm space-y-1">
                     <Link
                       href={`/admin/campaigns/${m.campaign.id}`}
-                      className="text-zinc-900 dark:text-zinc-50 hover:underline font-medium block"
+                      className="font-medium hover:underline block truncate"
                     >
                       {m.campaign.name}
                     </Link>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span
-                        className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${MEMBER_STATUS_COLORS[m.status]}`}
-                      >
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="secondary" className="text-[10px]">
                         {m.status}
-                      </span>
+                      </Badge>
                       {m.remindersSent > 0 && (
-                        <span className="text-[10px] text-zinc-500">
-                          · {m.remindersSent} reminder{m.remindersSent === 1 ? "" : "s"}
+                        <span className="text-[11px] text-muted-foreground">
+                          {m.remindersSent} reminder
+                          {m.remindersSent === 1 ? "" : "s"}
                         </span>
                       )}
-                      <Link
+                      <a
                         href={`/onboard/${m.token}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[10px] text-zinc-500 hover:underline ml-auto"
+                        className="text-[11px] text-muted-foreground hover:text-foreground ml-auto inline-flex items-center gap-0.5"
                       >
-                        Form ↗
-                      </Link>
+                        Form
+                        <ExternalLink className="size-3" />
+                      </a>
                     </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+                    {m !== provider.campaignMemberships.at(-1) && (
+                      <Separator className="mt-2" />
+                    )}
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
 
-          {/* Recent events */}
-          <section className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5">
-            <h2 className="font-medium text-zinc-900 dark:text-zinc-50 mb-3">
-              Activity
-            </h2>
-            {provider.events.length === 0 ? (
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                No events yet.
-              </p>
-            ) : (
-              <ul className="space-y-2.5">
-                {provider.events.map((e) => (
-                  <li key={e.id} className="text-sm">
-                    <div className="font-medium text-zinc-900 dark:text-zinc-50">
-                      {EVENT_LABELS[e.type] ?? e.type}
-                    </div>
-                    <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                      {new Date(e.createdAt).toLocaleString()}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          {/* Activity */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">Activity</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {provider.events.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No events yet.</p>
+              ) : (
+                <ul className="space-y-3 relative before:absolute before:left-[5px] before:top-1 before:bottom-1 before:w-px before:bg-border">
+                  {provider.events.slice(0, 8).map((e) => (
+                    <li
+                      key={e.id}
+                      className="text-sm pl-5 relative"
+                    >
+                      <span className="absolute left-0 top-1.5 size-2.5 rounded-full bg-foreground/80 ring-2 ring-background" />
+                      <div className="text-xs font-medium">
+                        {EVENT_LABELS[e.type] ?? prettify(e.type)}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {relTime(e.createdAt)}
+                      </div>
+                    </li>
+                  ))}
+                  {provider.events.length > 8 && (
+                    <li className="text-[11px] text-muted-foreground pl-5">
+                      + {provider.events.length - 8} more
+                    </li>
+                  )}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
 
-          {/* Recent WA messages */}
-          <section className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5">
-            <h2 className="font-medium text-zinc-900 dark:text-zinc-50 mb-3">
-              WhatsApp messages
-            </h2>
-            {provider.whatsappMessages.length === 0 ? (
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                No messages sent.
-              </p>
-            ) : (
-              <ul className="space-y-2.5">
-                {provider.whatsappMessages.map((w) => (
-                  <li key={w.id} className="text-xs">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium text-zinc-900 dark:text-zinc-50">
-                        {w.messageTemplate?.name ?? "Custom"}
-                      </span>
-                      <span
-                        className={`uppercase tracking-wide ${
-                          w.status === "SENT" || w.status === "DELIVERED" || w.status === "READ"
-                            ? "text-emerald-600"
-                            : w.status === "FAILED"
-                              ? "text-red-600"
-                              : "text-zinc-500"
-                        }`}
-                      >
-                        {w.status}
-                      </span>
-                    </div>
-                    <p className="text-zinc-600 dark:text-zinc-400 line-clamp-2">
-                      {w.body}
-                    </p>
-                    <div className="text-zinc-500 dark:text-zinc-400 mt-0.5">
-                      {new Date(w.createdAt).toLocaleString()}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          {/* WhatsApp messages */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">WhatsApp messages</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {provider.whatsappMessages.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No messages sent.
+                </p>
+              ) : (
+                <ul className="space-y-3">
+                  {provider.whatsappMessages.slice(0, 6).map((w) => (
+                    <li key={w.id} className="text-xs space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium truncate">
+                          {w.messageTemplate?.name ?? "Custom"}
+                        </span>
+                        <MessageStatusPill status={w.status} />
+                      </div>
+                      <p className="text-muted-foreground line-clamp-2">
+                        {w.body}
+                      </p>
+                      <div className="text-[10px] text-muted-foreground">
+                        {relTime(w.createdAt)}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
         </aside>
       </div>
     </div>
+  );
+}
+
+// ---------- atoms ----------
+
+function Label({ children }: { children: React.ReactNode }) {
+  return (
+    <dt className="text-xs uppercase tracking-wider text-muted-foreground pt-0.5">
+      {children}
+    </dt>
+  );
+}
+function Value({ children }: { children: React.ReactNode }) {
+  return <dd className="text-sm">{children}</dd>;
+}
+function Dash() {
+  return <span className="text-muted-foreground">—</span>;
+}
+
+function MessageStatusPill({ status }: { status: string }) {
+  if (status === "SENT" || status === "DELIVERED" || status === "READ")
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] text-success font-medium">
+        <CheckCircle2 className="size-3" />
+        {status}
+      </span>
+    );
+  if (status === "FAILED")
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] text-destructive font-medium">
+        <AlertCircle className="size-3" />
+        {status}
+      </span>
+    );
+  if (status === "QUEUED" || status === "PENDING")
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground font-medium">
+        <Loader2 className="size-3" />
+        {status}
+      </span>
+    );
+  return (
+    <span className="text-[10px] text-muted-foreground font-medium">
+      {status}
+    </span>
   );
 }
 
@@ -414,18 +498,19 @@ function FieldRow({
   const rendered = formatValue(row.value, row.type, def?.options);
   return (
     <>
-      <dt className="text-zinc-500 dark:text-zinc-400 text-xs uppercase tracking-wide pt-0.5">
-        {row.label}
-        {row.piiLevel === "MEDIUM" || row.piiLevel === "HIGH" ? (
-          <span
-            className="ml-1 text-[9px] px-1 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 uppercase"
+      <dt className="text-xs uppercase tracking-wider text-muted-foreground pt-1 flex items-center gap-1.5">
+        <span>{row.label}</span>
+        {(row.piiLevel === "MEDIUM" || row.piiLevel === "HIGH") && (
+          <Badge
+            variant="outline"
+            className="text-[9px] px-1 py-0 h-3.5 text-warning border-warning/40"
             title={`PII: ${row.piiLevel}`}
           >
             PII
-          </span>
-        ) : null}
+          </Badge>
+        )}
       </dt>
-      <dd className="text-zinc-900 dark:text-zinc-50">{rendered}</dd>
+      <dd className="text-sm">{rendered}</dd>
     </>
   );
 }
@@ -435,16 +520,13 @@ function formatValue(
   type: string,
   options: unknown,
 ): React.ReactNode {
-  if (value === null || value === undefined || value === "")
-    return <span className="text-zinc-400">—</span>;
+  if (value === null || value === undefined || value === "") return <Dash />;
 
   if (type === "SELFIE" || type === "FILE_IMAGE" || type === "FILE_DOC") {
     return <FileValue value={value} type={type} />;
   }
 
-  if (type === "GEO_POINT") {
-    return <GeoValue value={value} />;
-  }
+  if (type === "GEO_POINT") return <GeoValue value={value} />;
 
   if (type === "SINGLE_SELECT") {
     const opts = Array.isArray(options) ? (options as Option[]) : [];
@@ -459,39 +541,28 @@ function formatValue(
         {arr.map((v, i) => {
           const found = opts.find((o) => o.value === v);
           return (
-            <span
-              key={i}
-              className="text-xs px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
-            >
+            <Badge key={i} variant="secondary" className="text-[10px]">
               {found ? found.label : String(v)}
-            </span>
+            </Badge>
           );
         })}
       </div>
     );
   }
-  if (type === "BOOLEAN") {
-    return value === true ? "Yes" : "No";
-  }
-  if (type === "DATE") {
-    return String(value);
-  }
+  if (type === "BOOLEAN") return value === true ? "Yes" : "No";
+  if (type === "DATE") return String(value);
   return String(value);
 }
 
 function GeoValue({ value }: { value: unknown }) {
-  if (!value || typeof value !== "object") {
-    return <span className="text-zinc-400">—</span>;
-  }
+  if (!value || typeof value !== "object") return <Dash />;
   const v = value as {
     lat?: number;
     lng?: number;
     accuracy?: number | null;
     capturedAt?: string;
   };
-  if (typeof v.lat !== "number" || typeof v.lng !== "number") {
-    return <span className="text-zinc-400">—</span>;
-  }
+  if (typeof v.lat !== "number" || typeof v.lng !== "number") return <Dash />;
   const mapsUrl = `https://www.google.com/maps?q=${v.lat},${v.lng}`;
   return (
     <div className="space-y-0.5">
@@ -499,15 +570,20 @@ function GeoValue({ value }: { value: unknown }) {
         href={mapsUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 text-zinc-900 dark:text-zinc-50 hover:underline font-mono text-xs"
+        className="inline-flex items-center gap-1.5 hover:underline font-mono text-xs"
       >
-        📍 {v.lat.toFixed(5)}, {v.lng.toFixed(5)} ↗
+        <MapPin className="size-3" />
+        {v.lat.toFixed(5)}, {v.lng.toFixed(5)}
+        <ExternalLink className="size-3" />
       </a>
-      <div className="text-xs text-zinc-500 dark:text-zinc-400">
-        {v.accuracy != null ? `±${Math.round(v.accuracy)}m` : "accuracy unknown"}
+      <div className="text-xs text-muted-foreground">
+        {v.accuracy != null
+          ? `±${Math.round(v.accuracy)}m`
+          : "accuracy unknown"}
         {v.capturedAt && (
           <span className="ml-2">
-            · captured {new Date(v.capturedAt).toLocaleString()}
+            <Calendar className="inline size-3 mr-0.5" />
+            {new Date(v.capturedAt).toLocaleDateString()}
           </span>
         )}
       </div>
@@ -516,11 +592,9 @@ function GeoValue({ value }: { value: unknown }) {
 }
 
 function FileValue({ value, type }: { value: unknown; type: string }) {
-  if (!value || typeof value !== "object") {
-    return <span className="text-zinc-400">—</span>;
-  }
+  if (!value || typeof value !== "object") return <Dash />;
   const v = value as { url?: string; originalName?: string; mimeType?: string };
-  if (!v.url) return <span className="text-zinc-400">—</span>;
+  if (!v.url) return <Dash />;
 
   const isPdf = (v.mimeType ?? "").includes("pdf");
   if (isPdf || type === "FILE_DOC") {
@@ -529,21 +603,40 @@ function FileValue({ value, type }: { value: unknown; type: string }) {
         href={v.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800"
+        className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border bg-muted/30 text-xs font-medium hover:bg-muted transition-colors"
       >
-        📄 {v.originalName ?? "Document"} ↗
+        📄 {v.originalName ?? "Document"}
+        <ExternalLink className="size-3" />
       </a>
     );
   }
-  // Image
   return (
     <a href={v.url} target="_blank" rel="noopener noreferrer" className="block">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={v.url}
         alt={v.originalName ?? "Uploaded image"}
-        className="w-32 h-32 rounded-md object-cover bg-zinc-100 border border-zinc-200 dark:border-zinc-800 hover:opacity-90"
+        className="size-28 rounded-md object-cover border hover:opacity-90 transition-opacity"
       />
     </a>
   );
+}
+
+function prettify(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function relTime(d: Date): string {
+  const diff = Date.now() - new Date(d).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const days = Math.floor(h / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(d).toLocaleDateString();
 }

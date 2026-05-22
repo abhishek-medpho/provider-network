@@ -2,6 +2,18 @@ import { AttributeType, PiiLevel } from "@prisma/client";
 import { createAttribute } from "@/lib/actions/attributes";
 import OptionsEditor from "../_components/OptionsEditor";
 import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const TYPES_WITH_OPTIONS = ["SINGLE_SELECT", "MULTI_SELECT"];
 
@@ -22,132 +34,143 @@ async function NewForm({
   const initialType = (type && type in AttributeType ? type : "TEXT") as string;
 
   return (
-    <div className="px-8 py-8 max-w-2xl">
-      <Link
-        href="/admin/attributes"
-        className="text-sm text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-50 mb-4 inline-block"
-      >
-        ← All attributes
-      </Link>
+    <div className="p-6 md:p-8 space-y-5 max-w-3xl">
+      <Button variant="ghost" size="sm" asChild className="-ml-2">
+        <Link href="/admin/attributes">
+          <ChevronLeft className="size-4" />
+          All attributes
+        </Link>
+      </Button>
 
-      <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50 mb-6">
-        New attribute
-      </h1>
+      <header>
+        <h1>New attribute</h1>
+        <p className="text-sm text-muted-foreground">
+          Atomic data point captured per care provider.
+        </p>
+      </header>
 
-      <form action={createAttribute} className="space-y-6">
-        <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 space-y-4">
-          <Field
-            label="Key"
-            name="key"
-            placeholder="snake_case_key"
-            required
-            help="Lowercase, underscores. Cannot be changed after create. e.g. years_experience, has_vehicle"
-          />
-          <Field label="Label" name="label" required placeholder="Shown to user" />
-          <Field
-            label="Help text"
-            name="helpText"
-            placeholder="Optional context shown below the input"
-          />
-          <Field
-            label="Category"
-            name="category"
-            placeholder="e.g. identity, skills, commercials"
-          />
+      <form action={createAttribute} className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Basics</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Field
+              label="Key"
+              name="key"
+              placeholder="snake_case_key"
+              required
+              help="Lowercase, underscores. Cannot be changed after create. e.g. years_experience, has_vehicle"
+            />
+            <Field
+              label="Label"
+              name="label"
+              required
+              placeholder="Shown to user"
+            />
+            <Field
+              label="Help text"
+              name="helpText"
+              placeholder="Optional context shown below the input"
+            />
+            <Field
+              label="Category"
+              name="category"
+              placeholder="e.g. identity, skills, commercials"
+            />
 
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Type <span className="text-red-500">*</span>
-            </label>
-            <select
-              name="type"
-              defaultValue={initialType}
-              className="w-full px-3 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm"
-            >
-              {Object.keys(AttributeType).map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="type">
+                Type <span className="text-destructive">*</span>
+              </Label>
+              <select
+                id="type"
+                name="type"
+                defaultValue={initialType}
+                className="w-full h-9 px-3 rounded-md border bg-background text-sm"
+              >
+                {Object.keys(AttributeType).map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </CardContent>
+        </Card>
 
         {TYPES_WITH_OPTIONS.includes(initialType) && (
-          <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 space-y-3">
-            <h2 className="font-medium text-zinc-900 dark:text-zinc-50">
-              Options
-            </h2>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Required for SELECT types. You can add more later.
-            </p>
-            <OptionsEditor initial={[{ value: "", label: "" }]} />
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Options</CardTitle>
+              <CardDescription>
+                Required for SELECT types. You can add more later.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <OptionsEditor initial={[{ value: "", label: "" }]} />
+            </CardContent>
+          </Card>
         )}
 
-        <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 space-y-3">
-          <h2 className="font-medium text-zinc-900 dark:text-zinc-50">
-            Validation
-          </h2>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex items-center gap-2 text-sm col-span-2">
-              <input type="checkbox" name="validation_required" />
-              Required
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Validation</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox name="validation_required" id="validation_required" />
+              <span>Required</span>
             </label>
-            <Field label="Min" name="validation_min" type="number" />
-            <Field label="Max" name="validation_max" type="number" />
-            <Field
-              label="Regex"
-              name="validation_regex"
-              placeholder="^[0-9]{6}$"
-            />
-            <Field
-              label="File max KB"
-              name="validation_fileMaxKb"
-              type="number"
-            />
-          </div>
-        </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Min" name="validation_min" type="number" />
+              <Field label="Max" name="validation_max" type="number" />
+              <Field
+                label="Regex"
+                name="validation_regex"
+                placeholder="^[0-9]{6}$"
+              />
+              <Field
+                label="File max KB"
+                name="validation_fileMaxKb"
+                type="number"
+              />
+            </div>
+          </CardContent>
+        </Card>
 
-        <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 space-y-3">
-          <h2 className="font-medium text-zinc-900 dark:text-zinc-50">
-            Privacy & search
-          </h2>
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              PII Level
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Privacy & search</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="piiLevel">PII Level</Label>
+              <select
+                id="piiLevel"
+                name="piiLevel"
+                defaultValue="NONE"
+                className="w-full h-9 px-3 rounded-md border bg-background text-sm"
+              >
+                {Object.keys(PiiLevel).map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox name="isSearchable" id="isSearchable" />
+              <span>Indexed for search</span>
             </label>
-            <select
-              name="piiLevel"
-              defaultValue="NONE"
-              className="w-full px-3 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm"
-            >
-              {Object.keys(PiiLevel).map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-          </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" name="isSearchable" />
-            Indexed for search
-          </label>
-        </div>
+          </CardContent>
+        </Card>
 
-        <div className="flex gap-3">
-          <button
-            type="submit"
-            className="px-4 py-2 rounded-md bg-zinc-900 dark:bg-zinc-50 text-white dark:text-zinc-900 text-sm font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200"
-          >
-            Create attribute
-          </button>
-          <Link
-            href="/admin/attributes"
-            className="px-4 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800"
-          >
-            Cancel
-          </Link>
+        <div className="flex gap-2">
+          <Button type="submit">Create attribute</Button>
+          <Button variant="outline" asChild>
+            <Link href="/admin/attributes">Cancel</Link>
+          </Button>
         </div>
       </form>
     </div>
@@ -170,25 +193,19 @@ function Field({
   help?: string;
 }) {
   return (
-    <div className="space-y-1">
-      <label
-        htmlFor={name}
-        className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
-      >
+    <div className="space-y-1.5">
+      <Label htmlFor={name}>
         {label}
-        {required && <span className="text-red-500 ml-0.5">*</span>}
-      </label>
-      <input
+        {required && <span className="text-destructive ml-0.5">*</span>}
+      </Label>
+      <Input
         id={name}
         name={name}
         type={type}
         placeholder={placeholder}
         required={required}
-        className="w-full px-3 py-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm"
       />
-      {help && (
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">{help}</p>
-      )}
+      {help && <p className="text-xs text-muted-foreground">{help}</p>}
     </div>
   );
 }
