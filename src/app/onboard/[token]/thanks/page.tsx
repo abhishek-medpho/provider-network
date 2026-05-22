@@ -39,7 +39,24 @@ export default async function OnboardThanksPage({
           opportunities in your area via WhatsApp.
         </p>
         <p className="text-xs text-zinc-500">
-          Care Provider Platform · Your data is secure
+          Powered by{" "}
+          <a
+            href="https://www.labstack.in"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-zinc-700 hover:text-zinc-900 underline underline-offset-2"
+          >
+            Labstack
+          </a>
+          {" · "}
+          <a
+            href="https://www.labstack.in"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-zinc-700 hover:text-zinc-900 underline underline-offset-2"
+          >
+            www.labstack.in
+          </a>
         </p>
       </div>
     </main>

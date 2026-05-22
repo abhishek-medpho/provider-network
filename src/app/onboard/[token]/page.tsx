@@ -176,9 +176,29 @@ export default async function OnboardPage({
         </div>
       </form>
 
-      <p className="text-center text-xs text-zinc-500 pb-6">
-        Care Provider Platform · Your data is secure
-      </p>
+      <footer className="text-center text-xs text-zinc-500 pb-6 space-y-1">
+        <p>
+          Powered by{" "}
+          <a
+            href="https://www.labstack.in"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-zinc-700 hover:text-zinc-900 underline underline-offset-2"
+          >
+            Labstack
+          </a>
+          {" · "}
+          <a
+            href="https://www.labstack.in"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-zinc-700 hover:text-zinc-900 underline underline-offset-2"
+          >
+            www.labstack.in
+          </a>
+        </p>
+        <p>Your data is secure and only seen by our verification team.</p>
+      </footer>
     </main>
   );
 }
