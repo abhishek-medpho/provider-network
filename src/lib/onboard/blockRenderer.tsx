@@ -8,6 +8,7 @@
 import type { Attribute } from "@prisma/client";
 import type { FormBlock, FormSection } from "@/lib/types/form";
 import GeoPointField from "./GeoPointField";
+import { FileUploadField } from "@/components/onboard/FileUploadField";
 
 type AttributeOption = { value: string; label: string };
 
@@ -460,64 +461,36 @@ function renderAttributeInput({
     case "FILE_IMAGE":
     case "FILE_DOC": {
       const isSelfie = attr.type === "SELFIE";
-      const isDoc = attr.type === "FILE_DOC";
-      const accept = isDoc ? "application/pdf,image/*" : "image/*";
-      // Selfies are camera-only (front). All other file types allow the user
-      // to choose camera OR gallery via the native OS picker.
+      // Everything except selfies accepts PDFs too — useful for scanned IDs
+      // and certificates. Selfies must be a live photo, image only.
+      const accept = isSelfie ? "image/*" : "application/pdf,image/*";
       const capture: "user" | undefined = isSelfie ? "user" : undefined;
       const existing = (() => {
         const v = values[attr.key];
         if (v && typeof v === "object" && "url" in v) {
-          return v as { url: string; originalName?: string };
+          const rec = v as { url: string; originalName?: string; mimeType?: string };
+          return {
+            url: rec.url,
+            originalName: rec.originalName,
+            isDoc: rec.mimeType === "application/pdf",
+          };
         }
         return null;
       })();
+      const hint = isSelfie
+        ? "Opens your front camera"
+        : "Choose from gallery, files, or take a photo. PDFs allowed.";
       return (
         <div>
           {labelEl}
-          {existing && (
-            <div className="mb-2 rounded-lg border border-zinc-200 bg-white p-2 flex items-center gap-3">
-              {!isDoc ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={existing.url}
-                  alt={existing.originalName ?? "Uploaded"}
-                  className="w-16 h-16 rounded-md object-cover bg-zinc-100"
-                />
-              ) : (
-                <div className="w-16 h-16 rounded-md bg-zinc-100 flex items-center justify-center text-2xl">
-                  📄
-                </div>
-              )}
-              <div className="text-xs text-zinc-700">
-                <div className="font-medium">Already uploaded</div>
-                <div className="text-zinc-500">
-                  {existing.originalName ?? "—"}
-                </div>
-                <div className="text-zinc-500 mt-0.5">
-                  Pick a new file below to replace.
-                </div>
-              </div>
-            </div>
-          )}
-          <label className="block">
-            <input
-              id={attr.key}
-              name={attr.key}
-              type="file"
-              accept={accept}
-              capture={capture}
-              required={required && !existing}
-              className="block w-full text-sm file:mr-3 file:px-4 file:py-2.5 file:rounded-lg file:border-0 file:bg-zinc-900 file:text-white file:text-sm file:font-medium hover:file:bg-zinc-800"
-            />
-          </label>
-          <p className="mt-1 text-xs text-zinc-500">
-            {isSelfie
-              ? "Opens your front camera"
-              : isDoc
-                ? "PDF or photo of the document — choose from camera or files"
-                : "Choose from your gallery or take a photo"}
-          </p>
+          <FileUploadField
+            name={attr.key}
+            accept={accept}
+            capture={capture}
+            required={required}
+            helpText={hint}
+            existing={existing}
+          />
           {helpEl}
         </div>
       );

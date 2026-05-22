@@ -260,8 +260,11 @@ export async function submitOnboarding(token: string, formData: FormData) {
         }
 
         try {
+          // Selfies must be image-only (live photo). Everything else (Aadhaar,
+          // certs, generic uploads) allows PDF too — handled by the "document"
+          // kind on the storage helper.
           const kind: "image" | "document" =
-            attr.type === "FILE_DOC" ? "document" : "image";
+            attr.type === "SELFIE" ? "image" : "document";
           const saved = await saveLocalFile(f, {
             careProviderId: member.careProviderId,
             kind,
