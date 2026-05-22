@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import type { ReminderKind, ReminderSendStatus } from "@prisma/client";
 import { Prisma } from "@prisma/client";
-import { sendWhatsAppText } from "@/lib/ultramsg";
+import { sendWhatsAppText, pacedSleep } from "@/lib/ultramsg";
 
 // ============================================================================
 // Types
@@ -252,6 +252,11 @@ export async function runReminderRules(): Promise<RunResult[]> {
           });
 
           result.sent++;
+
+          // Pace WhatsApp sends to avoid anti-spam triggers. Only sleep after
+          // an actual send — suppressed/failed-early items already skipped
+          // via `continue` before reaching here.
+          await pacedSleep();
         } catch (sendErr) {
           await writeLog({
             ruleId: rule.id,

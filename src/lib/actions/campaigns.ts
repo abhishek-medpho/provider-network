@@ -8,7 +8,7 @@ import { CampaignStatus, type Prisma } from "@prisma/client";
 import Papa from "papaparse";
 import { normalizePhone } from "@/lib/phone";
 import { renderBody } from "@/lib/messageTemplate";
-import { sendWhatsAppText } from "@/lib/ultramsg";
+import { sendWhatsAppText, pacedSleep } from "@/lib/ultramsg";
 
 async function requireAdmin() {
   const session = await auth();
@@ -386,7 +386,8 @@ async function dispatchInvites(
   let sent = 0;
   let failed = 0;
 
-  for (const m of members) {
+  for (let i = 0; i < members.length; i++) {
+    const m = members[i];
     const cp = m.careProvider;
     const vars: Record<string, string> = {
       name: cp.name ?? "there",
@@ -435,6 +436,12 @@ async function dispatchInvites(
       sent++;
     } else {
       failed++;
+    }
+
+    // Pace between sends to avoid WhatsApp anti-spam triggers. Skip after
+    // the last message — no point waiting if there's nothing next.
+    if (i < members.length - 1) {
+      await pacedSleep();
     }
   }
 

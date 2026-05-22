@@ -55,6 +55,32 @@ function formatError(context: string, status: number, data: unknown): string {
   return `Ultramsg ${context}: HTTP ${status}`;
 }
 
+// Retry config — applied to transient network failures and 5xx responses.
+// Subscription errors / 4xx auth failures are NOT retried.
+const MAX_ATTEMPTS = 3;
+const BASE_BACKOFF_MS = 800;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((res) => setTimeout(res, ms));
+}
+
+/**
+ * Is this an error worth retrying? Network errors and 5xx Ultramsg/Cloudflare
+ * blips are transient — retry them. Subscription stopped, 4xx auth, etc.
+ * are permanent and shouldn't waste attempts.
+ */
+function isTransient(status: number, errorMsg: string | null): boolean {
+  // Network errors (we synthesize status 0 for fetch throws below)
+  if (status === 0) return true;
+  // Cloudflare in front of Ultramsg flakes: 520, 521, 522, 524
+  if (status >= 500) return true;
+  // 429 = rate limited — retry with backoff
+  if (status === 429) return true;
+  // Don't retry "non-payment" — won't fix itself
+  if (errorMsg && errorMsg.toLowerCase().includes("non-payment")) return false;
+  return false;
+}
+
 async function ultramsgPost(
   endpoint: "messages/chat" | "messages/image" | "messages/document",
   params: Record<string, string>,
@@ -78,40 +104,81 @@ async function ultramsgPost(
   const url = `${instanceUrl()}/${endpoint}`;
   const body = new URLSearchParams({ token: TOKEN!, ...params });
 
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: body.toString(),
-    });
-    const data = (await res.json().catch(() => ({}))) as Record<
-      string,
-      unknown
-    >;
+  let lastErr: UltramsgSendResult = {
+    ok: false,
+    error: `Ultramsg ${context}: no attempts made`,
+  };
 
-    if (
-      !res.ok ||
-      (data as { error?: string }).error ||
-      (data as { sent?: string }).sent === "false"
-    ) {
-      return {
-        ok: false,
-        error: formatError(context, res.status, data),
-        raw: data,
-      };
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let status = 0;
+    let data: Record<string, unknown> = {};
+    let networkErr: Error | null = null;
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+      });
+      status = res.status;
+      data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    } catch (err) {
+      networkErr = err instanceof Error ? err : new Error(String(err));
+      status = 0;
     }
 
-    const id =
-      (data as { id?: string | number }).id ??
-      (data as { message?: { id?: string } }).message?.id ??
-      "";
-    return { ok: true, messageId: String(id), raw: data };
-  } catch (err) {
-    return {
-      ok: false,
-      error: `Ultramsg ${context}: ${err instanceof Error ? err.message : String(err)}`,
-    };
+    // Success path
+    if (
+      !networkErr &&
+      status >= 200 &&
+      status < 300 &&
+      !(data as { error?: string }).error &&
+      (data as { sent?: string }).sent !== "false"
+    ) {
+      const id =
+        (data as { id?: string | number }).id ??
+        (data as { message?: { id?: string } }).message?.id ??
+        "";
+      if (attempt > 1) {
+        console.log(
+          `[ultramsg] ${context} succeeded on attempt ${attempt}/${MAX_ATTEMPTS}`,
+        );
+      }
+      return { ok: true, messageId: String(id), raw: data };
+    }
+
+    // Failure — decide whether to retry
+    const apiErr =
+      (data as { error?: string; message?: string }).error ??
+      (data as { error?: string; message?: string }).message ??
+      networkErr?.message ??
+      null;
+    const errorMsg = networkErr
+      ? `Ultramsg ${context}: ${networkErr.message}`
+      : formatError(context, status, data);
+
+    lastErr = { ok: false, error: errorMsg, raw: data };
+
+    const transient = isTransient(status, apiErr);
+    const willRetry = transient && attempt < MAX_ATTEMPTS;
+
+    if (willRetry) {
+      // Exponential backoff with jitter: 800ms, 1600ms, 3200ms ± 25%
+      const base = BASE_BACKOFF_MS * Math.pow(2, attempt - 1);
+      const jitter = base * (0.75 + Math.random() * 0.5);
+      const wait = Math.round(jitter);
+      console.warn(
+        `[ultramsg] ${context} attempt ${attempt}/${MAX_ATTEMPTS} failed (${errorMsg}) — retrying in ${wait}ms`,
+      );
+      await sleep(wait);
+      continue;
+    }
+
+    // Permanent error OR retries exhausted
+    return lastErr;
   }
+
+  return lastErr;
 }
 
 /**
@@ -123,6 +190,24 @@ export async function sendWhatsAppText(
   body: string,
 ): Promise<UltramsgSendResult> {
   return ultramsgPost("messages/chat", { to, body }, "text");
+}
+
+/**
+ * Sleep a humanlike, randomized interval between bulk WhatsApp sends. Required
+ * to avoid WhatsApp's anti-spam triggers — sustained >1 msg/min on a single
+ * number gets the account flagged and (eventually) banned.
+ *
+ * Caller passes the iteration index and total length so we skip the wait on
+ * the last item. Override the window via env if you want to ship more
+ * aggressively (do this only if you know your WhatsApp account is warmed up).
+ */
+const PACE_MIN_MS = Number(process.env.WHATSAPP_PACE_MIN_MS ?? 3000);
+const PACE_MAX_MS = Number(process.env.WHATSAPP_PACE_MAX_MS ?? 10000);
+
+export async function pacedSleep(): Promise<void> {
+  const range = Math.max(0, PACE_MAX_MS - PACE_MIN_MS);
+  const ms = PACE_MIN_MS + Math.floor(Math.random() * (range + 1));
+  await sleep(ms);
 }
 
 /**
