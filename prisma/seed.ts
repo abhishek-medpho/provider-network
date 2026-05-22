@@ -405,6 +405,7 @@ const nurseAttributes: AttributeSeed[] = [
   {
     key: "nurse_procedures",
     label: "Procedures you're comfortable performing",
+    helpText: "Select at least 3 procedures you can perform confidently.",
     type: AttributeType.MULTI_SELECT,
     category: "skills",
     options: [

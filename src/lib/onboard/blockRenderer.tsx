@@ -44,13 +44,32 @@ export function renderSection({
   context: Record<string, unknown>;
   lockedAttributeKeys?: Set<string>;
 }) {
+  // A section is "required" if any of its ATTRIBUTE blocks is required —
+  // either via the block's own isRequired flag or via the attribute's
+  // validation.required.
+  const hasRequiredBlock = section.blocks.some((b) => {
+    if (b.type !== "ATTRIBUTE") return false;
+    if (b.isRequired === true) return true;
+    const attr = attrById.get(b.attributeId);
+    return attr?.validation && (attr.validation as { required?: boolean }).required === true;
+  });
+
   return (
     <section
       key={section.key}
       className="rounded-xl border border-zinc-200 bg-white p-5 space-y-5"
     >
       <header>
-        <h2 className="text-lg font-semibold text-zinc-900">{section.title}</h2>
+        <div className="flex items-center gap-2 flex-wrap">
+          <h2 className="text-lg font-semibold text-zinc-900">
+            {section.title}
+          </h2>
+          {hasRequiredBlock && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-50 text-red-700 border border-red-100">
+              Required
+            </span>
+          )}
+        </div>
         {section.description && (
           <p className="text-sm text-zinc-600 mt-1">{section.description}</p>
         )}
@@ -443,7 +462,9 @@ function renderAttributeInput({
       const isSelfie = attr.type === "SELFIE";
       const isDoc = attr.type === "FILE_DOC";
       const accept = isDoc ? "application/pdf,image/*" : "image/*";
-      const capture = isSelfie ? "user" : "environment";
+      // Selfies are camera-only (front). All other file types allow the user
+      // to choose camera OR gallery via the native OS picker.
+      const capture: "user" | undefined = isSelfie ? "user" : undefined;
       const existing = (() => {
         const v = values[attr.key];
         if (v && typeof v === "object" && "url" in v) {
@@ -485,7 +506,7 @@ function renderAttributeInput({
               name={attr.key}
               type="file"
               accept={accept}
-              capture={!isDoc ? capture : undefined}
+              capture={capture}
               required={required && !existing}
               className="block w-full text-sm file:mr-3 file:px-4 file:py-2.5 file:rounded-lg file:border-0 file:bg-zinc-900 file:text-white file:text-sm file:font-medium hover:file:bg-zinc-800"
             />
@@ -494,8 +515,8 @@ function renderAttributeInput({
             {isSelfie
               ? "Opens your front camera"
               : isDoc
-                ? "PDF or photo of the document"
-                : "Opens your camera"}
+                ? "PDF or photo of the document — choose from camera or files"
+                : "Choose from your gallery or take a photo"}
           </p>
           {helpEl}
         </div>
