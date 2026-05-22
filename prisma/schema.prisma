@@ -350,6 +350,17 @@ model Campaign {
   status                   CampaignStatus @default(DRAFT)
   startedAt                DateTime?
   completedAt              DateTime?
+
+  // Background-launch progress. Action returns immediately and the
+  // dispatch loop streams updates here; UI polls /launch-status.
+  launchInProgress         Boolean        @default(false)
+  launchStartedAt          DateTime?
+  launchCompletedAt        DateTime?
+  launchTotal              Int            @default(0)
+  launchSent               Int            @default(0)
+  launchFailed             Int            @default(0)
+  launchError              String?
+
   createdAt                DateTime       @default(now())
   updatedAt                DateTime       @updatedAt
 

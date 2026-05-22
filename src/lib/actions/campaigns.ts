@@ -42,7 +42,11 @@ export async function createCampaign(formData: FormData) {
   const reminderRules = parseReminderRulesFromForm(formData);
 
   // Throttling
-  const maxSendsPerDay = Number(formData.get("maxSendsPerDay") ?? 100);
+  // Accept both new and legacy form field names so an in-flight form submit
+  // from an older client still works.
+  const maxSendsPerLaunch = Number(
+    formData.get("maxSendsPerLaunch") ?? formData.get("maxSendsPerDay") ?? 100,
+  );
   const maxSendsPerProvider = Number(formData.get("maxSendsPerProvider") ?? 4);
 
   const created = await prisma.campaign.create({
@@ -53,7 +57,7 @@ export async function createCampaign(formData: FormData) {
       inviteMessageTemplateId,
       reminderRules: reminderRules as unknown as Prisma.InputJsonValue,
       throttle: {
-        maxSendsPerDay,
+        maxSendsPerLaunch,
         maxSendsPerProvider,
       } as Prisma.InputJsonValue,
       stopConditions: [
@@ -83,7 +87,11 @@ export async function updateCampaignSettings(id: string, formData: FormData) {
     inviteMessageTemplateIdRaw === "" ? null : inviteMessageTemplateIdRaw;
 
   const reminderRules = parseReminderRulesFromForm(formData);
-  const maxSendsPerDay = Number(formData.get("maxSendsPerDay") ?? 100);
+  // Accept both new and legacy form field names so an in-flight form submit
+  // from an older client still works.
+  const maxSendsPerLaunch = Number(
+    formData.get("maxSendsPerLaunch") ?? formData.get("maxSendsPerDay") ?? 100,
+  );
   const maxSendsPerProvider = Number(formData.get("maxSendsPerProvider") ?? 4);
 
   await prisma.campaign.update({
@@ -94,7 +102,7 @@ export async function updateCampaignSettings(id: string, formData: FormData) {
       inviteMessageTemplateId,
       reminderRules: reminderRules as unknown as Prisma.InputJsonValue,
       throttle: {
-        maxSendsPerDay,
+        maxSendsPerLaunch,
         maxSendsPerProvider,
       } as Prisma.InputJsonValue,
     },
@@ -319,45 +327,119 @@ export async function uploadLeads(
 // Launch (send invites)
 // ---------------------------------------------------------------------------
 
+/**
+ * Launch a campaign — sends the WhatsApp invite to all PENDING members.
+ *
+ * Non-blocking: validates config, claims the launch lock, then returns
+ * immediately. The actual send loop runs as a fire-and-forget async task
+ * that streams progress into Campaign.launchSent / launchFailed. The UI
+ * polls /api/campaigns/[id]/launch-status to render a progress bar.
+ *
+ * Lock guarantees only one launch loop can run per campaign at a time.
+ */
 export async function launchCampaign(
   id: string,
-): Promise<{ ok: boolean; sent: number; failed: number; error?: string }> {
+): Promise<{
+  ok: boolean;
+  total?: number;
+  started?: boolean;
+  error?: string;
+}> {
   await requireAdmin();
 
   const campaign = await prisma.campaign.findUnique({
     where: { id },
     include: {
-      inviteMessageTemplate: true,
+      inviteMessageTemplate: { select: { id: true } },
       formTemplate: { select: { id: true } },
     },
   });
-  if (!campaign) return { ok: false, sent: 0, failed: 0, error: "Not found" };
+  if (!campaign) return { ok: false, error: "Campaign not found" };
   if (!campaign.inviteMessageTemplate)
-    return {
-      ok: false,
-      sent: 0,
-      failed: 0,
-      error: "No invite message template configured",
-    };
+    return { ok: false, error: "No invite message template configured" };
   if (!campaign.formTemplate)
-    return {
-      ok: false,
-      sent: 0,
-      failed: 0,
-      error: "No form template configured",
-    };
+    return { ok: false, error: "No form template configured" };
 
-  // Flip campaign status if still draft
-  if (campaign.status === "DRAFT") {
-    await prisma.campaign.update({
-      where: { id },
-      data: { status: "RUNNING", startedAt: new Date() },
-    });
+  // How many PENDING members would actually receive a send?
+  const throttle =
+    (campaign.throttle as { maxSendsPerLaunch?: number; maxSendsPerDay?: number } | null) ?? {};
+  const cap = throttle.maxSendsPerLaunch ?? throttle.maxSendsPerDay ?? 100;
+
+  const eligible = await prisma.campaignMember.count({
+    where: {
+      campaignId: id,
+      status: "PENDING",
+      lastSentAt: null,
+      careProvider: { optedOutAt: null },
+    },
+  });
+  if (eligible === 0) {
+    return { ok: true, total: 0, started: false };
   }
 
-  const result = await dispatchInvites(id);
+  const total = Math.min(eligible, cap);
+
+  // Claim the lock atomically. updateMany with `where: launchInProgress: false`
+  // prevents a second launch click from spawning a parallel loop.
+  const claim = await prisma.campaign.updateMany({
+    where: { id, launchInProgress: false },
+    data: {
+      launchInProgress: true,
+      launchStartedAt: new Date(),
+      launchCompletedAt: null,
+      launchTotal: total,
+      launchSent: 0,
+      launchFailed: 0,
+      launchError: null,
+      ...(campaign.status === "DRAFT"
+        ? { status: "RUNNING", startedAt: new Date() }
+        : {}),
+    },
+  });
+  if (claim.count === 0) {
+    return { ok: false, error: "A launch is already in progress." };
+  }
+
+  // Fire-and-forget the actual send loop. We deliberately do NOT await it —
+  // the action returns now and the loop continues in the background.
+  // Errors are caught + persisted via the lock-release in finally().
+  void dispatchInvitesAsync(id).catch((err) => {
+    console.error(`[launchCampaign] dispatch failed for ${id}:`, err);
+  });
+
   revalidatePath(`/admin/campaigns/${id}`);
-  return result;
+  return { ok: true, total, started: true };
+}
+
+/**
+ * Background send loop. Streams progress via UPDATE statements on the
+ * Campaign row, so the polling endpoint can read live counters. Always
+ * releases the lock in `finally`, regardless of error.
+ */
+async function dispatchInvitesAsync(campaignId: string): Promise<void> {
+  try {
+    await dispatchInvites(campaignId);
+  } catch (err) {
+    console.error(`[dispatchInvitesAsync] ${campaignId}:`, err);
+    await prisma.campaign
+      .update({
+        where: { id: campaignId },
+        data: {
+          launchError: err instanceof Error ? err.message : "Unknown error",
+        },
+      })
+      .catch(() => {});
+  } finally {
+    await prisma.campaign
+      .update({
+        where: { id: campaignId },
+        data: {
+          launchInProgress: false,
+          launchCompletedAt: new Date(),
+        },
+      })
+      .catch(() => {});
+  }
 }
 
 async function dispatchInvites(
@@ -370,12 +452,22 @@ async function dispatchInvites(
   if (!campaign || !campaign.inviteMessageTemplate)
     return { ok: false, sent: 0, failed: 0 };
 
-  const throttle = (campaign.throttle as { maxSendsPerDay?: number } | null) ?? {};
-  const limit = throttle.maxSendsPerDay ?? 100;
+  const throttle =
+    (campaign.throttle as {
+      maxSendsPerLaunch?: number;
+      maxSendsPerDay?: number;
+    } | null) ?? {};
+  // Accept the new field name; fall back to the legacy one for older campaigns.
+  const limit = throttle.maxSendsPerLaunch ?? throttle.maxSendsPerDay ?? 100;
 
-  // Pending members that have never been sent an invite
+  // Pending members that have never been sent an invite AND haven't opted out.
   const members = await prisma.campaignMember.findMany({
-    where: { campaignId, status: "PENDING", lastSentAt: null },
+    where: {
+      campaignId,
+      status: "PENDING",
+      lastSentAt: null,
+      careProvider: { optedOutAt: null },
+    },
     include: { careProvider: true },
     take: limit,
   });
@@ -437,6 +529,16 @@ async function dispatchInvites(
     } else {
       failed++;
     }
+
+    // Stream progress into the campaign row so the UI's polling endpoint
+    // sees live numbers. Best-effort — don't let a write failure kill the
+    // send loop.
+    await prisma.campaign
+      .update({
+        where: { id: campaignId },
+        data: { launchSent: sent, launchFailed: failed },
+      })
+      .catch(() => {});
 
     // Pace between sends to avoid WhatsApp anti-spam triggers. Skip after
     // the last message — no point waiting if there's nothing next.

@@ -170,11 +170,11 @@ export default async function NewCampaignPage() {
           <CardContent>
             <div className="grid grid-cols-2 gap-3">
               <Field
-                label="Max sends per day"
-                name="maxSendsPerDay"
+                label="Max sends per launch"
+                name="maxSendsPerLaunch"
                 type="number"
                 defaultValue="100"
-                help="Ultramsg bans are real. Start conservative."
+                help="How many invites each Launch click sends. WhatsApp bans bulk-blast — keep ≤100 for cold lists."
               />
               <Field
                 label="Max sends per provider"

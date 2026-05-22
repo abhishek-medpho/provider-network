@@ -8,7 +8,7 @@
     "status": "DRAFT",
     "stopConditions": ["status>=VERIFIED", "optedOut=true"],
     "throttle": {
-      "maxSendsPerDay": 100,
+      "maxSendsPerLaunch": 100,
       "maxSendsPerProvider": 4
     },
     "reminderRules": []

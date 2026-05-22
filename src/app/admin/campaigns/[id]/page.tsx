@@ -222,6 +222,7 @@ export default async function CampaignDetailPage({
                 <LaunchButton
                   action={launchAction}
                   pendingMembers={pendingMembers}
+                  campaignId={id}
                 />
               </div>
               <div className="space-y-2">
@@ -428,16 +429,27 @@ export default async function CampaignDetailPage({
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="maxSendsPerDay">Max sends per day</Label>
+                <Label htmlFor="maxSendsPerLaunch">Max sends per launch</Label>
                 <Input
-                  id="maxSendsPerDay"
+                  id="maxSendsPerLaunch"
                   type="number"
-                  name="maxSendsPerDay"
+                  name="maxSendsPerLaunch"
                   defaultValue={
-                    (campaign.throttle as { maxSendsPerDay?: number } | null)
-                      ?.maxSendsPerDay ?? 100
+                    (
+                      campaign.throttle as {
+                        maxSendsPerLaunch?: number;
+                        maxSendsPerDay?: number;
+                      } | null
+                    )?.maxSendsPerLaunch ??
+                    (
+                      campaign.throttle as { maxSendsPerDay?: number } | null
+                    )?.maxSendsPerDay ??
+                    100
                   }
                 />
+                <p className="text-xs text-muted-foreground">
+                  How many invites each Launch click sends.
+                </p>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="maxSendsPerProvider">
