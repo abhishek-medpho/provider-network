@@ -226,14 +226,15 @@ export async function runReminderRules(): Promise<RunResult[]> {
             },
           });
 
-          // Update campaignMember.remindersSent + lastSentAt if applicable
+          // Increment remindersSent counter on the campaign member.
+          // We intentionally do NOT update lastSentAt here — that field
+          // records when the original invite was sent and is used as the
+          // delay-window anchor by the CAMPAIGN_FOLLOWUP audience query.
+          // Each rule's own cooldown is enforced via ReminderLog entries.
           if (t.campaignMemberId) {
             await prisma.campaignMember.update({
               where: { id: t.campaignMemberId },
-              data: {
-                remindersSent: { increment: 1 },
-                lastSentAt: new Date(),
-              },
+              data: { remindersSent: { increment: 1 } },
             });
           }
 

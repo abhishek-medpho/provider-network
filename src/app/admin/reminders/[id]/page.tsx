@@ -138,9 +138,6 @@ export default async function ReminderDetailPage({
           <button
             type="submit"
             className="text-xs text-red-600 hover:text-red-800 hover:underline"
-            onClick={(e) => {
-              if (!confirm("Delete this rule and all its logs?")) e.preventDefault();
-            }}
           >
             Delete rule
           </button>
