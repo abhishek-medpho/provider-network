@@ -1,4 +1,10 @@
 import { prisma } from "@/lib/db";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Thanks — profile submitted",
+  description: "Your profile has been submitted to Labstack for verification.",
+};
 
 export default async function OnboardThanksPage({
   params,

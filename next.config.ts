@@ -12,6 +12,14 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
       bodySizeLimit: "25mb",
+      // When the app sits behind a reverse proxy (Caddy/Cloudflare/etc.)
+      // terminating TLS, Next.js can read the Host as http://... while the
+      // browser sends Origin as https://... — the CSRF check then rejects
+      // every POST silently. Explicitly trust the production host(s).
+      allowedOrigins: [
+        "providers.labstack.in",
+        "www.providers.labstack.in",
+      ],
     },
   },
 };

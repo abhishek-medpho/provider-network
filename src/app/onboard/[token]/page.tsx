@@ -1,11 +1,19 @@
 import { prisma } from "@/lib/db";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { renderSection } from "@/lib/onboard/blockRenderer";
 import {
   submitOnboarding,
   recordFormOpened,
 } from "@/lib/actions/onboard";
 import type { FormSection, FormAction } from "@/lib/types/form";
+import { SubmitButton } from "@/components/onboard/SubmitButton";
+
+export const metadata: Metadata = {
+  title: "Labstack Provider — Complete your profile",
+  description:
+    "Submit your details to start receiving job opportunities from Labstack.",
+};
 
 export default async function OnboardPage({
   params,
@@ -119,9 +127,31 @@ export default async function OnboardPage({
       ) {
         throw err;
       }
-      const message =
-        err instanceof Error ? err.message : "Something went wrong";
-      redirect(`/onboard/${token}?error=${encodeURIComponent(message)}`);
+
+      // Translate raw error text into something a care provider can act on.
+      // Server-internal details (stack traces, Prisma codes, etc.) stay in
+      // the logs; the user gets a friendly redirect.
+      const raw = err instanceof Error ? err.message : "";
+      console.error("[onboard] submit failed:", err);
+
+      let friendly: string;
+      if (raw.startsWith("Validation failed")) {
+        // Already user-facing — pass through as-is.
+        friendly = raw;
+      } else if (/EACCES|ENOSPC|EBADF|ENOENT/.test(raw)) {
+        friendly =
+          "We couldn't save your uploaded files. Please try again or contact support.";
+      } else if (/Invalid or expired link/i.test(raw)) {
+        friendly =
+          "This link has expired. Please request a fresh link from Labstack.";
+      } else if (/connection|timeout|ECONNREFUSED/i.test(raw)) {
+        friendly =
+          "Our servers are temporarily unreachable. Please try again in a minute.";
+      } else {
+        friendly =
+          "Something went wrong on our end. Please try again, or contact Labstack if it keeps failing.";
+      }
+      redirect(`/onboard/${token}?error=${encodeURIComponent(friendly)}`);
     }
   }
 
@@ -154,24 +184,15 @@ export default async function OnboardPage({
         )}
 
         <div className="pt-2 pb-10 flex flex-col gap-2 sm:flex-row sm:justify-end">
-          {actions.length === 0 && (
-            <button
-              type="submit"
-              className="w-full sm:w-auto px-6 py-3 rounded-lg bg-zinc-900 text-white text-base font-medium hover:bg-zinc-800"
-            >
-              Submit
-            </button>
-          )}
+          {actions.length === 0 && <SubmitButton label="Submit" />}
           {actions.map((a) => (
-            <button
+            <SubmitButton
               key={a.key}
-              type="submit"
+              label={a.label}
               name="_action"
               value={a.kind}
               className={buttonClass(a.style)}
-            >
-              {a.label}
-            </button>
+            />
           ))}
         </div>
       </form>
