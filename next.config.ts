@@ -3,6 +3,13 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Produce a self-contained server bundle in .next/standalone for Docker.
   output: "standalone",
+  // Allow ngrok tunnels to reach dev resources (HMR, webpack chunks).
+  // Harmless in prod — only affects `next dev`.
+  allowedDevOrigins: [
+    "*.ngrok-free.dev",
+    "*.ngrok-free.app",
+    "*.trycloudflare.com",
+  ],
   // Server actions process the onboarding form, which includes 3-4 phone
   // photos (selfie + Aadhaar front/back + qualification cert). Default
   // 1MB is far too small.
