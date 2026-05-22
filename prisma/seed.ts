@@ -141,6 +141,15 @@ const sharedAttributes: AttributeSeed[] = [
     ],
     validation: { required: true },
   },
+  {
+    key: "home_location",
+    label: "Your home location (precise)",
+    type: AttributeType.GEO_POINT,
+    category: "geography",
+    helpText: "Captured from your phone GPS for accurate service-area matching.",
+    validation: { required: false },
+    isSearchable: true,
+  },
   // --- Languages ---
   {
     key: "languages_spoken",

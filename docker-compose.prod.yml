@@ -40,6 +40,10 @@ services:
       ADMIN_NAME: ${ADMIN_NAME:-Super Admin}
       CRON_SECRET: ${CRON_SECRET:?CRON_SECRET required}
       SEED_ON_BOOT: ${SEED_ON_BOOT:-true}
+      # Point the local-file storage driver at the volume-mounted directory.
+      # Default (process.cwd()/uploads) lands in /app/uploads which is not
+      # writable by the nextjs user and not on a persisted volume.
+      STORAGE_LOCAL_ROOT: /app/public/uploads
     ports:
       - "${APP_PORT:-3000}:3000"
     volumes:
