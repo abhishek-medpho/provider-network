@@ -59,6 +59,21 @@ export default async function NewMessageTemplatePage() {
                 placeholder="Shown in admin"
               />
               <div className="space-y-1.5">
+                <Label htmlFor="channel">
+                  Channel <span className="text-destructive">*</span>
+                </Label>
+                <select
+                  id="channel"
+                  name="channel"
+                  defaultValue="WHATSAPP"
+                  className="w-full h-9 px-3 rounded-md border bg-background text-sm"
+                >
+                  <option value="WHATSAPP">WhatsApp</option>
+                  <option value="EMAIL">Email</option>
+                  <option value="SMS">SMS (not yet wired)</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
                 <Label htmlFor="kind">
                   Kind <span className="text-destructive">*</span>
                 </Label>
@@ -103,17 +118,57 @@ export default async function NewMessageTemplatePage() {
 
         <Card>
           <CardHeader>
+            <CardTitle className="text-sm">Subject (email only)</CardTitle>
+            <CardDescription>
+              Required if channel = EMAIL. Supports{" "}
+              <code className="font-mono text-xs px-1 py-px bg-muted rounded">
+                {`{{merge_tags}}`}
+              </code>{" "}
+              like the body.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Field
+              label="Subject"
+              name="subject"
+              placeholder="Quick onboarding for {{role_label}} roles — {{name}}"
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle className="text-sm">Body</CardTitle>
             <CardDescription>
-              Use{" "}
+              Plain-text body. For email this is the text/plain fallback
+              shown by clients that don&apos;t render HTML. Use{" "}
               <code className="font-mono text-xs px-1 py-px bg-muted rounded">
                 {`{{variable_name}}`}
               </code>{" "}
-              for merge tags. Variables are auto-detected on save.
+              for merge tags.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <BodyEditor initial="" helpText="" />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">HTML body (email only)</CardTitle>
+            <CardDescription>
+              Optional. If left blank, the body text is wrapped in a minimal
+              HTML template at send time. Open + click tracking pixels are
+              auto-injected.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <textarea
+              name="html"
+              rows={10}
+              placeholder={`<!doctype html><body>\n  <h1>Hi {{name}}</h1>\n  <p><a href="{{form_link}}">Complete your profile</a></p>\n</body>`}
+              className="w-full min-h-[180px] px-3 py-2 rounded-md border bg-background text-xs font-mono"
+            />
           </CardContent>
         </Card>
 

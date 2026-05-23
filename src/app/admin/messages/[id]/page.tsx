@@ -118,6 +118,19 @@ export default async function MessageDetailPage({
                 required
               />
               <div className="space-y-1.5">
+                <Label htmlFor="channel">Channel</Label>
+                <select
+                  id="channel"
+                  name="channel"
+                  defaultValue={template.channel}
+                  className="w-full h-9 px-3 rounded-md border bg-background text-sm"
+                >
+                  <option value="WHATSAPP">WhatsApp</option>
+                  <option value="EMAIL">Email</option>
+                  <option value="SMS">SMS</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
                 <Label htmlFor="kind">Kind</Label>
                 <select
                   id="kind"
@@ -168,17 +181,53 @@ export default async function MessageDetailPage({
 
         <Card>
           <CardHeader>
+            <CardTitle className="text-sm">Subject (email only)</CardTitle>
+            <CardDescription>
+              Required when channel = EMAIL. Supports merge tags like body.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Field
+              label="Subject"
+              name="subject"
+              defaultValue={template.subject ?? ""}
+              placeholder="Subject line shown in inbox"
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle className="text-sm">Body</CardTitle>
             <CardDescription>
-              Use{" "}
+              Plain-text body / email text fallback. Use{" "}
               <code className="font-mono text-xs px-1 py-px bg-muted rounded">
                 {`{{variable_name}}`}
               </code>{" "}
-              for merge tags. Variables are auto-detected on save.
+              for merge tags.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <BodyEditor initial={template.body} helpText="" />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">HTML body (email only)</CardTitle>
+            <CardDescription>
+              Optional. Open + click tracking pixels are auto-injected at
+              send time.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <textarea
+              name="html"
+              defaultValue={template.html ?? ""}
+              rows={10}
+              placeholder={`<!doctype html><body>\n  <h1>Hi {{name}}</h1>\n  <p><a href="{{form_link}}">Complete your profile</a></p>\n</body>`}
+              className="w-full min-h-[180px] px-3 py-2 rounded-md border bg-background text-xs font-mono"
+            />
           </CardContent>
         </Card>
 

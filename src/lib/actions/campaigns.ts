@@ -40,6 +40,29 @@ export async function createCampaign(formData: FormData) {
   const inviteMessageTemplateId =
     inviteMessageTemplateIdRaw === "" ? null : inviteMessageTemplateIdRaw;
 
+  const inviteEmailTemplateIdRaw = String(
+    formData.get("inviteEmailTemplateId") ?? "",
+  ).trim();
+  const inviteEmailTemplateId =
+    inviteEmailTemplateIdRaw === "" ? null : inviteEmailTemplateIdRaw;
+
+  const channelStrategyRaw = String(
+    formData.get("channelStrategy") ?? "WHATSAPP_ONLY",
+  ).trim();
+  const ALLOWED_STRATEGIES = [
+    "WHATSAPP_ONLY",
+    "EMAIL_ONLY",
+    "BOTH",
+    "WHATSAPP_FIRST",
+    "EMAIL_FIRST",
+  ] as const;
+  type Strategy = (typeof ALLOWED_STRATEGIES)[number];
+  const channelStrategy: Strategy = ALLOWED_STRATEGIES.includes(
+    channelStrategyRaw as Strategy,
+  )
+    ? (channelStrategyRaw as Strategy)
+    : "WHATSAPP_ONLY";
+
   // Reminder rules — parse repeating fields
   const reminderRules = parseReminderRulesFromForm(formData);
 
@@ -57,6 +80,8 @@ export async function createCampaign(formData: FormData) {
       profileTypeId,
       formTemplateId,
       inviteMessageTemplateId,
+      inviteEmailTemplateId,
+      channelStrategy,
       reminderRules: reminderRules as unknown as Prisma.InputJsonValue,
       throttle: {
         maxSendsPerLaunch,
@@ -88,6 +113,29 @@ export async function updateCampaignSettings(id: string, formData: FormData) {
   const inviteMessageTemplateId =
     inviteMessageTemplateIdRaw === "" ? null : inviteMessageTemplateIdRaw;
 
+  const inviteEmailTemplateIdRaw = String(
+    formData.get("inviteEmailTemplateId") ?? "",
+  ).trim();
+  const inviteEmailTemplateId =
+    inviteEmailTemplateIdRaw === "" ? null : inviteEmailTemplateIdRaw;
+
+  const channelStrategyRaw = String(
+    formData.get("channelStrategy") ?? "WHATSAPP_ONLY",
+  ).trim();
+  const ALLOWED_STRATEGIES = [
+    "WHATSAPP_ONLY",
+    "EMAIL_ONLY",
+    "BOTH",
+    "WHATSAPP_FIRST",
+    "EMAIL_FIRST",
+  ] as const;
+  type Strategy2 = (typeof ALLOWED_STRATEGIES)[number];
+  const channelStrategy: Strategy2 = ALLOWED_STRATEGIES.includes(
+    channelStrategyRaw as Strategy2,
+  )
+    ? (channelStrategyRaw as Strategy2)
+    : "WHATSAPP_ONLY";
+
   const reminderRules = parseReminderRulesFromForm(formData);
   // Accept both new and legacy form field names so an in-flight form submit
   // from an older client still works.
@@ -102,6 +150,8 @@ export async function updateCampaignSettings(id: string, formData: FormData) {
       name,
       formTemplateId,
       inviteMessageTemplateId,
+      inviteEmailTemplateId,
+      channelStrategy,
       reminderRules: reminderRules as unknown as Prisma.InputJsonValue,
       throttle: {
         maxSendsPerLaunch,

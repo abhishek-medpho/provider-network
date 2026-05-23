@@ -32,14 +32,19 @@ export default async function NewCampaignPage() {
       },
     }),
     prisma.messageTemplate.findMany({
-      where: { active: true, channel: "WHATSAPP" },
+      where: { active: true },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, code: true, kind: true },
+      select: { id: true, name: true, code: true, kind: true, channel: true },
     }),
   ]);
 
-  const inviteTemplates = templates.filter(
-    (t) => t.kind === "INVITE" || t.kind === "CUSTOM",
+  const waInviteTemplates = templates.filter(
+    (t) =>
+      t.channel === "WHATSAPP" && (t.kind === "INVITE" || t.kind === "CUSTOM"),
+  );
+  const emailInviteTemplates = templates.filter(
+    (t) =>
+      t.channel === "EMAIL" && (t.kind === "INVITE" || t.kind === "CUSTOM"),
   );
 
   return (
@@ -123,29 +128,76 @@ export default async function NewCampaignPage() {
               </p>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="inviteMessageTemplateId">
-                Invite message template
-              </Label>
+              <Label htmlFor="channelStrategy">Channel strategy</Label>
               <select
-                id="inviteMessageTemplateId"
-                name="inviteMessageTemplateId"
-                defaultValue=""
+                id="channelStrategy"
+                name="channelStrategy"
+                defaultValue="WHATSAPP_ONLY"
                 className="w-full h-9 px-3 rounded-md border bg-background text-sm"
               >
-                <option value="">— None (cannot launch without one) —</option>
-                {inviteTemplates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({t.code})
-                  </option>
-                ))}
+                <option value="WHATSAPP_ONLY">WhatsApp only</option>
+                <option value="EMAIL_ONLY">Email only</option>
+                <option value="BOTH">Both — send WhatsApp + email</option>
+                <option value="WHATSAPP_FIRST">
+                  WhatsApp first, email as fallback
+                </option>
+                <option value="EMAIL_FIRST">
+                  Email first, WhatsApp as fallback
+                </option>
               </select>
               <p className="text-xs text-muted-foreground">
-                Variables:{" "}
-                <code className="font-mono text-[11px] px-1 py-px bg-muted rounded">
-                  {`{{name}} {{form_link}} {{role_label}}`}
-                </code>
+                How to route invites for each member based on what contact
+                info they have.
               </p>
             </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="inviteMessageTemplateId">
+                  WhatsApp template
+                </Label>
+                <select
+                  id="inviteMessageTemplateId"
+                  name="inviteMessageTemplateId"
+                  defaultValue=""
+                  className="w-full h-9 px-3 rounded-md border bg-background text-sm"
+                >
+                  <option value="">— None —</option>
+                  {waInviteTemplates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.code})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Required if strategy includes WhatsApp.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="inviteEmailTemplateId">Email template</Label>
+                <select
+                  id="inviteEmailTemplateId"
+                  name="inviteEmailTemplateId"
+                  defaultValue=""
+                  className="w-full h-9 px-3 rounded-md border bg-background text-sm"
+                >
+                  <option value="">— None —</option>
+                  {emailInviteTemplates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.code})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Required if strategy includes email.
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Variables for either template:{" "}
+              <code className="font-mono text-[11px] px-1 py-px bg-muted rounded">
+                {`{{name}} {{form_link}} {{role_label}} {{pincode}}`}
+              </code>
+            </p>
           </CardContent>
         </Card>
 

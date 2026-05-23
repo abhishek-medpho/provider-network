@@ -77,9 +77,9 @@ export default async function CampaignDetailPage({
       select: { id: true, name: true },
     }),
     prisma.messageTemplate.findMany({
-      where: { active: true, channel: "WHATSAPP" },
+      where: { active: true },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, code: true, kind: true },
+      select: { id: true, name: true, code: true, kind: true, channel: true },
     }),
   ]);
 
@@ -113,8 +113,13 @@ export default async function CampaignDetailPage({
       maxSends: number;
     }> | null) ?? [];
 
-  const inviteTemplates = templates.filter(
-    (t) => t.kind === "INVITE" || t.kind === "CUSTOM",
+  const waInviteTemplates = templates.filter(
+    (t) =>
+      t.channel === "WHATSAPP" && (t.kind === "INVITE" || t.kind === "CUSTOM"),
+  );
+  const emailInviteTemplates = templates.filter(
+    (t) =>
+      t.channel === "EMAIL" && (t.kind === "INVITE" || t.kind === "CUSTOM"),
   );
 
   async function settingsAction(formData: FormData) {
@@ -146,8 +151,24 @@ export default async function CampaignDetailPage({
     await archiveCampaign(id);
   }
 
-  const canLaunch =
-    !!campaign.inviteMessageTemplateId && !!campaign.formTemplateId;
+  // Validate based on channel strategy — different strategies require
+  // different templates to be configured.
+  const needsWa =
+    campaign.channelStrategy === "WHATSAPP_ONLY" ||
+    campaign.channelStrategy === "BOTH" ||
+    campaign.channelStrategy === "WHATSAPP_FIRST" ||
+    campaign.channelStrategy === "EMAIL_FIRST";
+  const needsEmail =
+    campaign.channelStrategy === "EMAIL_ONLY" ||
+    campaign.channelStrategy === "BOTH" ||
+    campaign.channelStrategy === "WHATSAPP_FIRST" ||
+    campaign.channelStrategy === "EMAIL_FIRST";
+  const requiredTemplateOk = needsWa
+    ? !!campaign.inviteMessageTemplateId
+    : needsEmail
+      ? !!campaign.inviteEmailTemplateId
+      : false;
+  const canLaunch = requiredTemplateOk && !!campaign.formTemplateId;
   // Match the same filter dispatchInvites uses — exclude opted-out providers
   // so the button label doesn't promise sends we'll then filter out.
   const pendingMembers = await prisma.campaignMember.count({
@@ -412,8 +433,30 @@ export default async function CampaignDetailPage({
                 </select>
               </div>
               <div className="space-y-1.5">
+                <Label htmlFor="channelStrategy">Channel strategy</Label>
+                <select
+                  id="channelStrategy"
+                  name="channelStrategy"
+                  defaultValue={campaign.channelStrategy ?? "WHATSAPP_ONLY"}
+                  className="w-full h-9 px-3 rounded-md border bg-background text-sm"
+                >
+                  <option value="WHATSAPP_ONLY">WhatsApp only</option>
+                  <option value="EMAIL_ONLY">Email only</option>
+                  <option value="BOTH">Both — WhatsApp + email</option>
+                  <option value="WHATSAPP_FIRST">
+                    WhatsApp first, email fallback
+                  </option>
+                  <option value="EMAIL_FIRST">
+                    Email first, WhatsApp fallback
+                  </option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
                 <Label htmlFor="inviteMessageTemplateId">
-                  Invite message template
+                  WhatsApp template
                 </Label>
                 <select
                   id="inviteMessageTemplateId"
@@ -422,7 +465,23 @@ export default async function CampaignDetailPage({
                   className="w-full h-9 px-3 rounded-md border bg-background text-sm"
                 >
                   <option value="">— None —</option>
-                  {inviteTemplates.map((t) => (
+                  {waInviteTemplates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="inviteEmailTemplateId">Email template</Label>
+                <select
+                  id="inviteEmailTemplateId"
+                  name="inviteEmailTemplateId"
+                  defaultValue={campaign.inviteEmailTemplateId ?? ""}
+                  className="w-full h-9 px-3 rounded-md border bg-background text-sm"
+                >
+                  <option value="">— None —</option>
+                  {emailInviteTemplates.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name} ({t.code})
                     </option>

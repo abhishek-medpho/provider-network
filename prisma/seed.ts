@@ -1080,6 +1080,19 @@ const messageTemplates = [
       "🎉 Welcome aboard, {{name}}!\n\nYour profile is verified. From now on, you'll get job offers via WhatsApp. Just reply YES to the ones you want.",
     variables: ["name"],
   },
+  {
+    code: "invite_generic_email",
+    name: "Generic invite — Email",
+    kind: "INVITE" as const,
+    channel: "EMAIL" as const,
+    subject:
+      "Quick onboarding for {{role_label}} roles near you — {{name}}",
+    body:
+      "Hi {{name}},\n\nWe're hiring {{role_label}}s in your area through our home-care platform.\n\nTell us about yourself in a 3-min form and we'll start sending you nearby job opportunities:\n\n{{form_link}}\n\n— Labstack Network\n\nReply STOP to opt out.",
+    html:
+      "<!doctype html>\n<html><body style=\"font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#18181b;max-width:560px;margin:0 auto;padding:24px;\">\n  <h1 style=\"font-size:20px;margin:0 0 16px;\">Hi {{name}},</h1>\n  <p>We're hiring <strong>{{role_label}}s</strong> in your area through our home-care platform.</p>\n  <p>Tell us about yourself in a 3-minute form and we'll start sending you nearby job opportunities:</p>\n  <p style=\"margin:24px 0;\">\n    <a href=\"{{form_link}}\" style=\"display:inline-block;background:#18181b;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600;\">Complete your profile</a>\n  </p>\n  <p style=\"color:#71717a;font-size:13px;\">— Labstack Network</p>\n  <p style=\"color:#a1a1aa;font-size:12px;margin-top:32px;\">Reply STOP to opt out of future emails.</p>\n</body></html>",
+    variables: ["name", "role_label", "form_link"],
+  },
 ];
 
 // ============================================================================
@@ -1201,12 +1214,18 @@ async function main() {
   // 3) Message templates
   console.log(`  • Upserting ${messageTemplates.length} message templates`);
   for (const tpl of messageTemplates) {
+    const channel = (tpl as { channel?: "WHATSAPP" | "EMAIL" | "SMS" }).channel ?? "WHATSAPP";
+    const subject = (tpl as { subject?: string }).subject ?? null;
+    const html = (tpl as { html?: string }).html ?? null;
     await prisma.messageTemplate.upsert({
       where: { code_language: { code: tpl.code, language: "en" } },
       update: {
         name: tpl.name,
         kind: tpl.kind,
+        channel,
         body: tpl.body,
+        subject,
+        html,
         variables: tpl.variables,
       },
       create: {
@@ -1214,8 +1233,10 @@ async function main() {
         language: "en",
         name: tpl.name,
         kind: tpl.kind,
-        channel: "WHATSAPP",
+        channel,
         body: tpl.body,
+        subject,
+        html,
         variables: tpl.variables,
       },
     });

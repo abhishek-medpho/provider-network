@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { MessageTemplateKind } from "@prisma/client";
+import { MessageTemplateKind, MessageChannel } from "@prisma/client";
 import { extractVariables, renderBody, SAMPLE_VARIABLES } from "@/lib/messageTemplate";
 import { sendWhatsAppText } from "@/lib/ultramsg";
 import { normalizePhone } from "@/lib/phone";
@@ -25,11 +25,29 @@ function parseCommonFields(formData: FormData) {
   const kind = (kindStr in MessageTemplateKind
     ? kindStr
     : "CUSTOM") as MessageTemplateKind;
+  const channelStr = String(formData.get("channel") ?? "WHATSAPP");
+  const channel = (channelStr in MessageChannel
+    ? channelStr
+    : "WHATSAPP") as MessageChannel;
   const body = String(formData.get("body") ?? "");
+  const subjectRaw = String(formData.get("subject") ?? "").trim();
+  const subject = subjectRaw === "" ? null : subjectRaw;
+  const htmlRaw = String(formData.get("html") ?? "");
+  const html = htmlRaw.trim() === "" ? null : htmlRaw;
   const profileTypeIdRaw = String(formData.get("profileTypeId") ?? "").trim();
   const profileTypeId = profileTypeIdRaw === "" ? null : profileTypeIdRaw;
   const active = formData.get("active") === "on";
-  return { name, language, kind, body, profileTypeId, active };
+  return {
+    name,
+    language,
+    kind,
+    channel,
+    body,
+    subject,
+    html,
+    profileTypeId,
+    active,
+  };
 }
 
 export async function createMessageTemplate(formData: FormData) {
@@ -42,10 +60,12 @@ export async function createMessageTemplate(formData: FormData) {
     );
   }
 
-  const { name, language, kind, body, profileTypeId } =
+  const { name, language, kind, channel, body, subject, html, profileTypeId } =
     parseCommonFields(formData);
   if (!name) throw new Error("Name is required");
   if (!body.trim()) throw new Error("Body is required");
+  if (channel === "EMAIL" && !subject)
+    throw new Error("Email templates need a subject");
 
   const existing = await prisma.messageTemplate.findUnique({
     where: { code_language: { code, language } },
@@ -55,7 +75,9 @@ export async function createMessageTemplate(formData: FormData) {
       `Template with code "${code}" already exists in language "${language}"`,
     );
 
-  const variables = extractVariables(body);
+  // Extract variables across all places they might appear
+  const variableSources = [body, subject ?? "", html ?? ""].join("\n");
+  const variables = extractVariables(variableSources);
 
   const created = await prisma.messageTemplate.create({
     data: {
@@ -63,10 +85,12 @@ export async function createMessageTemplate(formData: FormData) {
       name,
       language,
       kind,
+      channel,
       body,
+      subject,
+      html,
       variables,
       profileTypeId,
-      channel: "WHATSAPP",
       active: true,
     },
   });
@@ -81,16 +105,39 @@ export async function updateMessageTemplate(id: string, formData: FormData) {
   const existing = await prisma.messageTemplate.findUnique({ where: { id } });
   if (!existing) throw new Error("Message template not found");
 
-  const { name, language, kind, body, profileTypeId, active } =
-    parseCommonFields(formData);
+  const {
+    name,
+    language,
+    kind,
+    channel,
+    body,
+    subject,
+    html,
+    profileTypeId,
+    active,
+  } = parseCommonFields(formData);
   if (!name) throw new Error("Name is required");
   if (!body.trim()) throw new Error("Body is required");
+  if (channel === "EMAIL" && !subject)
+    throw new Error("Email templates need a subject");
 
-  const variables = extractVariables(body);
+  const variableSources = [body, subject ?? "", html ?? ""].join("\n");
+  const variables = extractVariables(variableSources);
 
   await prisma.messageTemplate.update({
     where: { id },
-    data: { name, language, kind, body, variables, profileTypeId, active },
+    data: {
+      name,
+      language,
+      kind,
+      channel,
+      body,
+      subject,
+      html,
+      variables,
+      profileTypeId,
+      active,
+    },
   });
 
   revalidatePath("/admin/messages");
