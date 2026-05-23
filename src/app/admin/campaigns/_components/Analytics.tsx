@@ -29,10 +29,147 @@ export default function Analytics({ data }: { data: CampaignAnalytics }) {
         <TimingCard data={data} />
       </div>
 
+      {/* Email channel — only render when this campaign actually sent emails. */}
+      {data.email.total > 0 && <EmailCard data={data} />}
+
       {(data.bySource.length > 1 || data.topFailures.length > 0) && (
         <div className="grid lg:grid-cols-2 gap-4">
           {data.bySource.length > 1 && <BySourceCard data={data} />}
           {data.topFailures.length > 0 && <FailuresCard data={data} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Email engagement card — only visible when the campaign sent emails.
+ * Shows the funnel (sent → opened → clicked) as both raw counts and rates,
+ * plus a horizontal bar for visual comparison.
+ *
+ * Caveats — short version, see channels/email.ts for the long version:
+ *   - Apple Mail Privacy Protection inflates opens.
+ *   - Image-blocked clients suppress opens (true opens > recorded).
+ *   - Industry benchmarks: ~20-30% open rate, ~3-5% click rate is healthy.
+ */
+function EmailCard({ data }: { data: CampaignAnalytics }) {
+  const e = data.email;
+  const maxCount = Math.max(e.sent, 1);
+
+  return (
+    <section className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5">
+      <div className="flex items-baseline justify-between mb-4">
+        <h2 className="font-medium text-zinc-900 dark:text-zinc-50">
+          Email engagement
+        </h2>
+        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          {e.total.toLocaleString()} email{e.total === 1 ? "" : "s"} dispatched
+        </span>
+      </div>
+
+      {/* Funnel bars: sent → opened → clicked */}
+      <div className="space-y-3 mb-5">
+        <FunnelBar
+          label="Sent"
+          count={e.sent}
+          width={(e.sent / maxCount) * 100}
+        />
+        <FunnelBar
+          label="Opened"
+          count={e.opened}
+          width={(e.opened / maxCount) * 100}
+          rate={e.openRate}
+          rateLabel="open rate"
+        />
+        <FunnelBar
+          label="Clicked"
+          count={e.clicked}
+          width={(e.clicked / maxCount) * 100}
+          rate={e.clickRate}
+          rateLabel="click rate"
+        />
+      </div>
+
+      <dl className="grid grid-cols-2 sm:grid-cols-4 gap-y-2 gap-x-4 text-sm border-t border-zinc-100 dark:border-zinc-800 pt-3">
+        <Metric label="Open rate" value={pctStr(e.openRate)} />
+        <Metric label="Click rate" value={pctStr(e.clickRate)} />
+        <Metric
+          label="Click-to-open"
+          value={pctStr(e.ctor)}
+          hint="of opens that clicked"
+        />
+        <Metric label="Failed / bounced" value={String(e.failed)} />
+      </dl>
+
+      <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-3 leading-snug">
+        Note: Apple Mail Privacy Protection pre-fetches images, which inflates
+        open rates. Image-blocked clients don&apos;t fire the pixel — real
+        opens may be higher than recorded.
+      </p>
+    </section>
+  );
+}
+
+function FunnelBar({
+  label,
+  count,
+  width,
+  rate,
+  rateLabel,
+}: {
+  label: string;
+  count: number;
+  width: number;
+  rate?: number;
+  rateLabel?: string;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between text-sm mb-1">
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-zinc-900 dark:text-zinc-50">
+            {label}
+          </span>
+          <span className="text-zinc-500 dark:text-zinc-400 tabular-nums">
+            {count.toLocaleString()}
+          </span>
+        </div>
+        {rate !== undefined && (
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+            {pctStr(rate)} {rateLabel}
+          </span>
+        )}
+      </div>
+      <div className="h-2 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+        <div
+          className="h-full bg-zinc-900 dark:bg-zinc-100 transition-all"
+          style={{ width: `${Math.max(0, Math.min(100, width))}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
+  return (
+    <div>
+      <dt className="text-xs text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+        {label}
+      </dt>
+      <dd className="font-medium text-zinc-900 dark:text-zinc-50 tabular-nums">
+        {value}
+      </dd>
+      {hint && (
+        <div className="text-[10px] text-zinc-400 dark:text-zinc-500">
+          {hint}
         </div>
       )}
     </div>

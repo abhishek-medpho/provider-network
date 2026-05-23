@@ -58,6 +58,17 @@ export type CampaignAnalytics = {
     sent: number;
     failed: number;
   };
+  email: {
+    total: number;
+    sent: number;       // SMTP accepted (status SENT, OPENED, or CLICKED)
+    failed: number;     // FAILED or BOUNCED
+    opened: number;     // any open recorded — distinct members
+    clicked: number;    // any click recorded — distinct members
+    openRate: number;   // opened / sent  (0-1)
+    clickRate: number;  // clicked / sent (0-1)
+    /** Click-to-open rate — of those who opened, how many clicked. */
+    ctor: number;       // clicked / opened (0-1)
+  };
 };
 
 function pct(num: number, den: number): number {
@@ -134,6 +145,41 @@ export async function getCampaignAnalytics(
       )
       .reduce((s, r) => s + r._count._all, 0),
     failed: waCounts.find((r) => r.status === "FAILED")?._count._all ?? 0,
+  };
+
+  // 3b. Email stats — grouped by status + distinct-open / distinct-click counts
+  const emailCounts = await prisma.emailMessage.groupBy({
+    by: ["status"],
+    _count: { _all: true },
+    where: { campaignId },
+  });
+  const emailTotal = emailCounts.reduce((s, r) => s + r._count._all, 0);
+  const emailSent = emailCounts
+    .filter((r) => ["SENT", "OPENED", "CLICKED", "DELIVERED"].includes(r.status))
+    .reduce((s, r) => s + r._count._all, 0);
+  const emailFailed = emailCounts
+    .filter((r) => ["FAILED", "BOUNCED"].includes(r.status))
+    .reduce((s, r) => s + r._count._all, 0);
+
+  // Distinct counts — one open/click per EmailMessage, not per EmailEvent.
+  // (A heavily-engaging recipient who opens 5 times still counts as 1 open.)
+  const [emailOpened, emailClicked] = await Promise.all([
+    prisma.emailMessage.count({
+      where: { campaignId, openedAt: { not: null } },
+    }),
+    prisma.emailMessage.count({
+      where: { campaignId, firstClickedAt: { not: null } },
+    }),
+  ]);
+  const email = {
+    total: emailTotal,
+    sent: emailSent,
+    failed: emailFailed,
+    opened: emailOpened,
+    clicked: emailClicked,
+    openRate: pct(emailOpened, emailSent),
+    clickRate: pct(emailClicked, emailSent),
+    ctor: pct(emailClicked, emailOpened),
   };
 
   // 4. Top failure error messages
@@ -316,6 +362,7 @@ export async function getCampaignAnalytics(
     bySource,
     topFailures,
     messages,
+    email,
   };
 }
 
