@@ -8,7 +8,9 @@ import { CampaignStatus, type Prisma } from "@prisma/client";
 import Papa from "papaparse";
 import { normalizePhone } from "@/lib/phone";
 import { renderBody } from "@/lib/messageTemplate";
-import { sendWhatsAppText, pacedSleep } from "@/lib/ultramsg";
+import { pacedSleep } from "@/lib/ultramsg";
+import { SENDERS, type Channel } from "@/lib/channels";
+import type { CareProvider, MessageTemplate, CampaignMember } from "@prisma/client";
 
 async function requireAdmin() {
   const session = await auth();
@@ -442,25 +444,163 @@ async function dispatchInvitesAsync(campaignId: string): Promise<void> {
   }
 }
 
+/**
+ * Pick which channels to dispatch for a given member based on the campaign's
+ * channelStrategy + what contact info the member has. Returns the channels
+ * in order they should be attempted (relevant only for *_FIRST strategies,
+ * where we stop after the first successful send).
+ */
+function pickChannelsForMember(
+  strategy: string,
+  cp: CareProvider,
+): { channels: Channel[]; firstSuccessWins: boolean } {
+  const hasPhone = Boolean(cp.phone);
+  const hasEmail = Boolean(cp.email);
+  switch (strategy) {
+    case "EMAIL_ONLY":
+      return { channels: hasEmail ? ["EMAIL"] : [], firstSuccessWins: false };
+    case "BOTH": {
+      const list: Channel[] = [];
+      if (hasPhone) list.push("WHATSAPP");
+      if (hasEmail) list.push("EMAIL");
+      return { channels: list, firstSuccessWins: false };
+    }
+    case "WHATSAPP_FIRST": {
+      const list: Channel[] = [];
+      if (hasPhone) list.push("WHATSAPP");
+      if (hasEmail) list.push("EMAIL");
+      return { channels: list, firstSuccessWins: true };
+    }
+    case "EMAIL_FIRST": {
+      const list: Channel[] = [];
+      if (hasEmail) list.push("EMAIL");
+      if (hasPhone) list.push("WHATSAPP");
+      return { channels: list, firstSuccessWins: true };
+    }
+    case "WHATSAPP_ONLY":
+    default:
+      return {
+        channels: hasPhone ? ["WHATSAPP"] : [],
+        firstSuccessWins: false,
+      };
+  }
+}
+
+/**
+ * Send a single invite over one channel for one campaign member. Logs the
+ * outbound row (WhatsAppMessage or EmailMessage), returns { ok }. Doesn't
+ * update the CampaignMember — caller decides member.status based on whether
+ * ANY channel succeeded (BOTH strategy) or the FIRST one (FIRST strategies).
+ */
+async function sendOnChannel(args: {
+  channel: Channel;
+  member: CampaignMember;
+  cp: CareProvider;
+  vars: Record<string, string>;
+  campaignId: string;
+  waTemplate: MessageTemplate | null;
+  emailTemplate: MessageTemplate | null;
+}): Promise<{ ok: boolean }> {
+  const { channel, member, cp, vars, campaignId, waTemplate, emailTemplate } =
+    args;
+  const sender = SENDERS[channel];
+
+  if (channel === "WHATSAPP") {
+    if (!waTemplate) return { ok: false };
+    const body = renderBody(waTemplate.body, vars);
+    const result = await sender.send({ to: cp.phone, body });
+    await prisma.whatsAppMessage.create({
+      data: {
+        careProviderId: cp.id,
+        campaignId,
+        messageTemplateId: waTemplate.id,
+        toPhone: cp.phone,
+        body,
+        status: result.ok ? "SENT" : "FAILED",
+        ultramsgMessageId: result.ok ? result.messageId : null,
+        errorMessage: !result.ok ? result.error : null,
+        sentAt: result.ok ? new Date() : null,
+      },
+    });
+    return { ok: result.ok };
+  }
+
+  if (channel === "EMAIL") {
+    if (!emailTemplate || !cp.email) return { ok: false };
+    const subject = renderBody(emailTemplate.subject ?? "", vars);
+    const body = renderBody(emailTemplate.body, vars);
+    const html = emailTemplate.html
+      ? renderBody(emailTemplate.html, vars)
+      : undefined;
+
+    // Pre-create the EmailMessage so we have an id for the tracking pixel,
+    // then update it with provider message id + sentAt after Gmail accepts.
+    const draft = await prisma.emailMessage.create({
+      data: {
+        careProviderId: cp.id,
+        campaignId,
+        messageTemplateId: emailTemplate.id,
+        toEmail: cp.email,
+        subject,
+        body,
+        html: null,
+        status: "SENDING",
+      },
+    });
+
+    const result = await sender.send({
+      to: cp.email,
+      subject,
+      body,
+      html,
+      trackingId: draft.id,
+    });
+
+    await prisma.emailMessage.update({
+      where: { id: draft.id },
+      data: {
+        status: result.ok ? "SENT" : "FAILED",
+        providerMessageId: result.ok ? result.messageId : null,
+        errorMessage: !result.ok ? result.error : null,
+        sentAt: result.ok ? new Date() : null,
+      },
+    });
+    return { ok: result.ok };
+  }
+
+  // SMS or unknown — currently not implemented
+  console.warn(`[sendOnChannel] channel ${channel} not implemented`);
+  // Keep `member` reference for future SMS implementation
+  void member;
+  return { ok: false };
+}
+
 async function dispatchInvites(
   campaignId: string,
 ): Promise<{ ok: boolean; sent: number; failed: number }> {
   const campaign = await prisma.campaign.findUnique({
     where: { id: campaignId },
-    include: { inviteMessageTemplate: true, profileType: true },
+    include: {
+      inviteMessageTemplate: true,
+      inviteEmailTemplate: true,
+      profileType: true,
+    },
   });
-  if (!campaign || !campaign.inviteMessageTemplate)
+  if (!campaign) return { ok: false, sent: 0, failed: 0 };
+
+  // Require at least one configured template — the strategy decides which.
+  if (!campaign.inviteMessageTemplate && !campaign.inviteEmailTemplate) {
     return { ok: false, sent: 0, failed: 0 };
+  }
 
   const throttle =
     (campaign.throttle as {
       maxSendsPerLaunch?: number;
       maxSendsPerDay?: number;
     } | null) ?? {};
-  // Accept the new field name; fall back to the legacy one for older campaigns.
   const limit = throttle.maxSendsPerLaunch ?? throttle.maxSendsPerDay ?? 100;
 
-  // Pending members that have never been sent an invite AND haven't opted out.
+  // Pending members, no prior send, not opted out.
   const members = await prisma.campaignMember.findMany({
     where: {
       campaignId,
@@ -473,7 +613,7 @@ async function dispatchInvites(
   });
 
   const baseUrl = process.env.APP_BASE_URL || process.env.NEXTAUTH_URL || "";
-  const tpl = campaign.inviteMessageTemplate;
+  const strategy = campaign.channelStrategy;
 
   let sent = 0;
   let failed = 0;
@@ -489,31 +629,39 @@ async function dispatchInvites(
       form_link: `${baseUrl}/onboard/${m.token}`,
       pincode: cp.pincodeHome ?? "",
     };
-    const body = renderBody(tpl.body, vars);
 
-    const result = await sendWhatsAppText(cp.phone, body);
+    const { channels, firstSuccessWins } = pickChannelsForMember(strategy, cp);
+    if (channels.length === 0) {
+      failed++;
+      console.warn(
+        `[dispatchInvites] member ${m.id} has no usable channel for strategy ${strategy} (phone=${!!cp.phone}, email=${!!cp.email})`,
+      );
+      continue;
+    }
 
-    await prisma.whatsAppMessage.create({
-      data: {
-        careProviderId: cp.id,
+    let anySuccess = false;
+    for (const channel of channels) {
+      const result = await sendOnChannel({
+        channel,
+        member: m,
+        cp,
+        vars,
         campaignId: campaign.id,
-        messageTemplateId: tpl.id,
-        toPhone: cp.phone,
-        body,
-        status: result.ok ? "SENT" : "FAILED",
-        ultramsgMessageId: result.ok ? result.messageId : null,
-        errorMessage: !result.ok ? result.error : null,
-        sentAt: result.ok ? new Date() : null,
-      },
-    });
+        waTemplate: campaign.inviteMessageTemplate,
+        emailTemplate: campaign.inviteEmailTemplate,
+      });
+      if (result.ok) anySuccess = true;
+      // Inter-channel pacing — short, since these go to different gateways.
+      if (channel !== channels[channels.length - 1]) {
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      if (result.ok && firstSuccessWins) break;
+    }
 
-    if (result.ok) {
+    if (anySuccess) {
       await prisma.campaignMember.update({
         where: { id: m.id },
-        data: {
-          status: "SENT",
-          lastSentAt: new Date(),
-        },
+        data: { status: "SENT", lastSentAt: new Date() },
       });
       await prisma.careProviderEvent.create({
         data: {
@@ -521,7 +669,8 @@ async function dispatchInvites(
           type: "INVITE_SENT",
           payload: {
             campaignId: campaign.id,
-            templateCode: tpl.code,
+            channels: channels,
+            strategy,
           } as Prisma.InputJsonValue,
         },
       });
@@ -657,7 +806,7 @@ export async function runReminders(
           pincode: cp.pincodeHome ?? "",
         };
         const body = renderBody(tpl.body, vars);
-        const result = await sendWhatsAppText(cp.phone, body);
+        const result = await SENDERS.WHATSAPP.send({ to: cp.phone, body });
 
         await prisma.whatsAppMessage.create({
           data: {

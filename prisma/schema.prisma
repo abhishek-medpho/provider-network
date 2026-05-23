@@ -101,6 +101,27 @@ enum WhatsAppMessageStatus {
   FAILED
 }
 
+enum EmailMessageStatus {
+  QUEUED
+  SENDING
+  SENT       // SMTP handed off to Gmail
+  DELIVERED  // Bounced-not received (we don't get a positive delivery signal without webhooks)
+  OPENED     // Pixel hit
+  CLICKED    // At least one link tracked
+  BOUNCED
+  FAILED
+}
+
+/// Per-campaign channel routing. Tells the dispatcher which channel(s) to
+/// fire for each member based on what contact info they have.
+enum ChannelStrategy {
+  WHATSAPP_ONLY    // Hard-fail if no phone
+  EMAIL_ONLY       // Hard-fail if no email
+  BOTH             // Fire both channels if both contact methods present
+  WHATSAPP_FIRST   // WhatsApp if phone exists, else email fallback
+  EMAIL_FIRST      // Email if email exists, else WhatsApp fallback
+}
+
 enum CampaignMemberStatus {
   PENDING
   SENT
@@ -287,7 +308,12 @@ model MessageTemplate {
   channel       MessageChannel      @default(WHATSAPP)
   language      String              @default("en") // ISO code
   kind          MessageTemplateKind @default(INVITE)
-  body          String              // template body with {{merge_tags}}
+  /// Email-only: subject line. Supports {{merge_tags}} same as body.
+  subject       String?
+  body          String              // template body / text fallback
+  /// Email-only: HTML body. If null on an EMAIL template, the renderer
+  /// auto-wraps `body` in a minimal HTML template (see channels/email.ts).
+  html          String?
   attachments   Json?               // [{ type, url, caption }]
   cta           Json?               // { type: LINK, label, urlPattern }
   variables     String[]            // declared merge tags for validation
@@ -298,9 +324,11 @@ model MessageTemplate {
 
   profileType   ProfileType?        @relation(fields: [profileTypeId], references: [id])
 
-  inviteForCampaigns   Campaign[] @relation("CampaignInviteTemplate")
-  whatsappMessages     WhatsAppMessage[]
-  reminderRules        ReminderRule[]
+  inviteForCampaigns       Campaign[] @relation("CampaignInviteTemplate")
+  inviteEmailForCampaigns  Campaign[] @relation("CampaignInviteEmail")
+  whatsappMessages         WhatsAppMessage[]
+  emailMessages            EmailMessage[]
+  reminderRules            ReminderRule[]
 
   @@unique([code, language])
   @@index([profileTypeId, active])
@@ -337,7 +365,15 @@ model Campaign {
   name                     String
   profileTypeId            String
   formTemplateId           String?
+  /// WhatsApp invite template (existing). Used when channel strategy
+  /// includes WhatsApp.
   inviteMessageTemplateId  String?
+  /// Email invite template (new). Used when channel strategy includes
+  /// email. May be null even if WHATSAPP_ONLY — that's fine.
+  inviteEmailTemplateId    String?
+  /// How to route invites for each member. Defaults to WHATSAPP_ONLY so
+  /// existing campaigns continue behaving exactly as before.
+  channelStrategy          ChannelStrategy @default(WHATSAPP_ONLY)
   leadBatchId              String?
 
   /// [{ triggerAfterHours, condition, messageTemplateId, maxSends }]
@@ -367,10 +403,12 @@ model Campaign {
   profileType              ProfileType        @relation(fields: [profileTypeId], references: [id])
   formTemplate             FormTemplate?      @relation(fields: [formTemplateId], references: [id])
   inviteMessageTemplate    MessageTemplate?   @relation("CampaignInviteTemplate", fields: [inviteMessageTemplateId], references: [id])
+  inviteEmailTemplate      MessageTemplate?   @relation("CampaignInviteEmail", fields: [inviteEmailTemplateId], references: [id])
   leadBatch                LeadBatch?         @relation(fields: [leadBatchId], references: [id])
 
   members                  CampaignMember[]
   whatsappMessages         WhatsAppMessage[]
+  emailMessages            EmailMessage[]
   reminderRuleItems        ReminderRule[]   @relation("CampaignReminderRules")
 
   @@index([status])
@@ -447,6 +485,7 @@ model CareProvider {
   events              CareProviderEvent[]
   campaignMemberships CampaignMember[]
   whatsappMessages    WhatsAppMessage[]
+  emailMessages       EmailMessage[]
   formResponses       FormResponse[]
   reminderLogs        ReminderLog[]
 
@@ -515,6 +554,68 @@ model WhatsAppMessage {
   @@index([toPhone])
   @@index([status])
   @@index([careProviderId])
+}
+
+/// Outbound email log — parallel to WhatsAppMessage. Open / click counts
+/// are filled by the /api/track/email/* endpoints when the recipient's
+/// client loads the tracking pixel or follows a wrapped link.
+model EmailMessage {
+  id                  String              @id @default(cuid())
+  careProviderId      String?
+  campaignId          String?
+  messageTemplateId   String?
+
+  toEmail             String
+  subject             String
+  /// Plain-text fallback (also stored for previewing in admin)
+  body                String
+  /// Rendered HTML with tracking already injected (pixel + click wrappers)
+  html                String?
+
+  status              EmailMessageStatus  @default(QUEUED)
+  /// SMTP message-id returned by Gmail. Useful for grepping bounce DSNs.
+  providerMessageId   String?
+  errorMessage        String?
+
+  sentAt              DateTime?
+  /// First time the open pixel was fetched. Multiple opens roll up here +
+  /// in EmailEvent rows.
+  openedAt            DateTime?
+  firstClickedAt      DateTime?
+  openCount           Int                 @default(0)
+  clickCount          Int                 @default(0)
+
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  careProvider        CareProvider?       @relation(fields: [careProviderId], references: [id])
+  campaign            Campaign?           @relation(fields: [campaignId], references: [id])
+  messageTemplate     MessageTemplate?    @relation(fields: [messageTemplateId], references: [id])
+
+  events              EmailEvent[]
+
+  @@index([toEmail])
+  @@index([status])
+  @@index([careProviderId])
+  @@index([campaignId])
+}
+
+/// One row per open or click event. Multiple opens/clicks per EmailMessage
+/// are normal — keep the granular log for funnel analysis later.
+model EmailEvent {
+  id              String       @id @default(cuid())
+  emailMessageId  String
+  kind            String       // "OPEN" | "CLICK"
+  /// For CLICK events: the original URL the recipient was redirected to.
+  url             String?
+  userAgent       String?
+  ipAddress       String?
+  createdAt       DateTime     @default(now())
+
+  emailMessage    EmailMessage @relation(fields: [emailMessageId], references: [id], onDelete: Cascade)
+
+  @@index([emailMessageId])
+  @@index([kind])
 }
 
 /// Inbound message from Ultramsg webhook. Even if we don't show a chat UI in
