@@ -16,19 +16,11 @@
  * Docs: https://docs.ultramsg.com/
  */
 
-const BASE_URL = "https://api.ultramsg.com";
-const INSTANCE_ID = process.env.ULTRAMSG_INSTANCE_ID;
-const TOKEN = process.env.ULTRAMSG_TOKEN;
-
-const instanceUrl = () => `${BASE_URL}/${INSTANCE_ID}`;
+import { getWhatsAppConfig } from "@/lib/channels/config";
 
 export type UltramsgSendResult =
   | { ok: true; messageId: string; raw: unknown }
   | { ok: false; error: string; raw?: unknown };
-
-function hasCreds(): boolean {
-  return Boolean(INSTANCE_ID && TOKEN);
-}
 
 /**
  * Format Ultramsg / fetch errors into a single concise line.
@@ -86,7 +78,9 @@ async function ultramsgPost(
   params: Record<string, string>,
   context: string,
 ): Promise<UltramsgSendResult> {
-  if (!hasCreds()) {
+  const cfg = await getWhatsAppConfig();
+
+  if (!cfg) {
     // Dev fallback: log instead of sending. Lets you build without creds.
     if (process.env.NODE_ENV !== "production") {
       console.warn(
@@ -97,12 +91,17 @@ async function ultramsgPost(
     }
     return {
       ok: false,
-      error: "ULTRAMSG_INSTANCE_ID/TOKEN not configured",
+      error:
+        "WhatsApp channel not configured. Set it up at /admin/settings or via ULTRAMSG_* env vars.",
     };
   }
 
-  const url = `${instanceUrl()}/${endpoint}`;
-  const body = new URLSearchParams({ token: TOKEN!, ...params });
+  if (!cfg.enabled) {
+    return { ok: false, error: "WhatsApp channel is disabled in settings." };
+  }
+
+  const url = `${cfg.baseUrl}/${cfg.instanceId}/${endpoint}`;
+  const body = new URLSearchParams({ token: cfg.token, ...params });
 
   let lastErr: UltramsgSendResult = {
     ok: false,

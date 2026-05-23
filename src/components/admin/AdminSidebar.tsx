@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Megaphone,
   Bell,
+  Settings,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ const NAV = [
   { href: "/admin/messages", label: "Messages", icon: MessageSquare },
   { href: "/admin/campaigns", label: "Campaigns", icon: Megaphone },
   { href: "/admin/reminders", label: "Reminders", icon: Bell },
+  { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
 export function AdminSidebar({

@@ -11,10 +11,14 @@ import type { ChannelSender, SendInput, SendResult } from "./types";
 export const whatsAppSender: ChannelSender = {
   channel: "WHATSAPP",
 
+  /**
+   * Sync stub. Real readiness is checked async at send time via the
+   * DB-aware config loader in ultramsg.ts. Returning true here just means
+   * the channel exists; lack of credentials surfaces as a clean error
+   * inside send().
+   */
   isConfigured(): boolean {
-    return Boolean(
-      process.env.ULTRAMSG_INSTANCE_ID && process.env.ULTRAMSG_TOKEN,
-    );
+    return true;
   },
 
   async send(input: SendInput): Promise<SendResult> {

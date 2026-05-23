@@ -556,6 +556,32 @@ model WhatsAppMessage {
   @@index([careProviderId])
 }
 
+/// Runtime configuration for outbound channels (WhatsApp/Email/SMS).
+/// One row per channel. Stored as JSON so each channel can have its own
+/// shape without schema migrations every time we add a setting.
+///
+/// Loader (lib/channels/config.ts) reads DB first and falls back to env
+/// vars for backwards compat with the original .env-driven setup. This lets
+/// admins rotate keys from the UI without touching `.env` or re-deploying.
+///
+/// SECURITY NOTE: values are plaintext for MVP. The DB is on the same
+/// trust boundary as the .env file (both readable by anyone with server
+/// access), so this isn't strictly worse — but encrypting the `config`
+/// blob with a SETTINGS_KEY env var is a planned hardening.
+model ChannelConfig {
+  id          String         @id @default(cuid())
+  channel     MessageChannel @unique
+  /// Whether the channel is enabled for outbound dispatch.
+  enabled     Boolean        @default(true)
+  /// Shape depends on channel:
+  ///   WHATSAPP: { instanceId, token, baseUrl?, defaultCountryCode? }
+  ///   EMAIL:    { gmailUser, gmailAppPassword, fromName?, replyTo? }
+  ///   SMS:      (future)
+  config      Json           @default("{}")
+  updatedAt   DateTime       @updatedAt
+  updatedById String?
+}
+
 /// Outbound email log — parallel to WhatsAppMessage. Open / click counts
 /// are filled by the /api/track/email/* endpoints when the recipient's
 /// client loads the tracking pixel or follows a wrapped link.

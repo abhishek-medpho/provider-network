@@ -21,11 +21,8 @@
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 import type { ChannelSender, SendInput, SendResult } from "./types";
+import { getEmailConfig } from "./config";
 
-const GMAIL_USER = process.env.GMAIL_USER;
-const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
-const FROM_NAME = process.env.EMAIL_FROM_NAME ?? "Labstack Network";
-const REPLY_TO = process.env.EMAIL_REPLY_TO ?? GMAIL_USER;
 const APP_BASE_URL =
   process.env.APP_BASE_URL ?? process.env.NEXTAUTH_URL ?? "";
 
@@ -33,18 +30,22 @@ const APP_BASE_URL =
 const MAX_ATTEMPTS = 3;
 const BASE_BACKOFF_MS = 800;
 
+// Cached transporter keyed by user+password — invalidated when settings change.
+let transporterKey: string | null = null;
 let cachedTransporter: Transporter | null = null;
 
-function getTransporter(): Transporter {
-  if (cachedTransporter) return cachedTransporter;
+function getTransporter(user: string, pass: string): Transporter {
+  const key = `${user}:${pass}`;
+  if (transporterKey === key && cachedTransporter) return cachedTransporter;
   cachedTransporter = nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 465,
     secure: true,
-    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
+    auth: { user, pass },
     // Gmail is fine with the default connection pool. If we ever need to
     // ramp throughput, set: `pool: true, maxConnections: 5, maxMessages: 100`.
   });
+  transporterKey = key;
   return cachedTransporter;
 }
 
@@ -132,12 +133,19 @@ ${paragraphs}
 export const emailSender: ChannelSender = {
   channel: "EMAIL",
 
+  /**
+   * Sync stub kept on the interface for compatibility. The real readiness
+   * check is async (DB lookup) and happens at send time. Returning true
+   * here means "this channel exists" — actual config presence is checked
+   * inside send().
+   */
   isConfigured(): boolean {
-    return Boolean(GMAIL_USER && GMAIL_APP_PASSWORD);
+    return true;
   },
 
   async send(input: SendInput): Promise<SendResult> {
-    if (!this.isConfigured()) {
+    const cfg = await getEmailConfig();
+    if (!cfg) {
       // Dev convenience: log instead of erroring when creds missing.
       if (process.env.NODE_ENV !== "production") {
         console.warn("[email] credentials missing — logging instead of sending");
@@ -150,8 +158,12 @@ export const emailSender: ChannelSender = {
       }
       return {
         ok: false,
-        error: "GMAIL_USER / GMAIL_APP_PASSWORD not configured",
+        error:
+          "Email channel not configured. Set it up at /admin/settings or via GMAIL_* env vars.",
       };
+    }
+    if (!cfg.enabled) {
+      return { ok: false, error: "Email channel is disabled in settings." };
     }
 
     if (!input.subject) {
@@ -160,7 +172,7 @@ export const emailSender: ChannelSender = {
 
     const html = input.html ?? textToHtml(input.body);
     const trackedHtml = injectTracking(html, input.trackingId);
-    const from = `"${FROM_NAME}" <${GMAIL_USER}>`;
+    const from = `"${cfg.fromName}" <${cfg.gmailUser}>`;
 
     let lastErr: SendResult = {
       ok: false,
@@ -169,10 +181,13 @@ export const emailSender: ChannelSender = {
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
-        const info = await getTransporter().sendMail({
+        const info = await getTransporter(
+          cfg.gmailUser,
+          cfg.gmailAppPassword,
+        ).sendMail({
           from,
           to: input.to,
-          replyTo: REPLY_TO,
+          replyTo: cfg.replyTo,
           subject: input.subject,
           text: input.body,
           html: trackedHtml,
