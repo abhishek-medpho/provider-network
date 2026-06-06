@@ -106,6 +106,68 @@ export default async function CampaignDetailPage({
     take: 200,
   });
 
+  // Aggregate per-provider message activity so each row can show what
+  // actually happened: invite sent on WA/email, email opened, email clicked.
+  // One round-trip per channel so the table stays cheap.
+  const providerIds = members.map((m) => m.careProvider.id);
+  const [waMessages, emailMessages] = providerIds.length
+    ? await Promise.all([
+        prisma.whatsAppMessage.findMany({
+          where: { campaignId: id, careProviderId: { in: providerIds } },
+          select: {
+            careProviderId: true,
+            status: true,
+          },
+        }),
+        prisma.emailMessage.findMany({
+          where: { campaignId: id, careProviderId: { in: providerIds } },
+          select: {
+            careProviderId: true,
+            status: true,
+            openedAt: true,
+            firstClickedAt: true,
+          },
+        }),
+      ])
+    : [[], []];
+
+  type MemberSignals = {
+    waSent: boolean;
+    waFailed: boolean;
+    emailSent: boolean;
+    emailOpened: boolean;
+    emailClicked: boolean;
+    emailFailed: boolean;
+  };
+  const signalsByCpId = new Map<string, MemberSignals>();
+  for (const cpId of providerIds) {
+    signalsByCpId.set(cpId, {
+      waSent: false,
+      waFailed: false,
+      emailSent: false,
+      emailOpened: false,
+      emailClicked: false,
+      emailFailed: false,
+    });
+  }
+  for (const wa of waMessages) {
+    if (!wa.careProviderId) continue;
+    const s = signalsByCpId.get(wa.careProviderId);
+    if (!s) continue;
+    if (["SENT", "DELIVERED", "READ"].includes(wa.status)) s.waSent = true;
+    if (wa.status === "FAILED") s.waFailed = true;
+  }
+  for (const em of emailMessages) {
+    if (!em.careProviderId) continue;
+    const s = signalsByCpId.get(em.careProviderId);
+    if (!s) continue;
+    if (["SENT", "OPENED", "CLICKED", "DELIVERED"].includes(em.status))
+      s.emailSent = true;
+    if (em.openedAt) s.emailOpened = true;
+    if (em.firstClickedAt) s.emailClicked = true;
+    if (["FAILED", "BOUNCED"].includes(em.status)) s.emailFailed = true;
+  }
+
   const reminderRules =
     (campaign.reminderRules as Array<{
       triggerAfterHours: number;
@@ -325,58 +387,64 @@ export default async function CampaignDetailPage({
                 <TableHead>Name</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Activity</TableHead>
                 <TableHead className="text-right">Reminders</TableHead>
                 <TableHead>Last sent</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {members.map((m) => (
-                <TableRow key={m.id}>
-                  <TableCell className="py-2.5">
-                    <Link
-                      href={`/admin/care-providers/${m.careProvider.id}`}
-                      className="font-medium hover:underline"
-                    >
-                      {m.careProvider.name ?? (
-                        <span className="text-muted-foreground italic">
-                          —
-                        </span>
-                      )}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">
-                    {m.careProvider.phone}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="secondary"
-                      className="text-[10px]"
-                    >
-                      {m.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right text-sm tabular-nums text-muted-foreground">
-                    {m.remindersSent}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {m.lastSentAt
-                      ? relTime(m.lastSentAt)
-                      : "—"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <a
-                      href={`/onboard/${m.token}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-0.5"
-                    >
-                      Form
-                      <ExternalLink className="size-3" />
-                    </a>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {members.map((m) => {
+                const sig = signalsByCpId.get(m.careProvider.id);
+                return (
+                  <TableRow key={m.id}>
+                    <TableCell className="py-2.5">
+                      <Link
+                        href={`/admin/care-providers/${m.careProvider.id}`}
+                        className="font-medium hover:underline"
+                      >
+                        {m.careProvider.name ?? (
+                          <span className="text-muted-foreground italic">
+                            —
+                          </span>
+                        )}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {m.careProvider.phone}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary" className="text-[10px]">
+                        {m.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <ActivityPills
+                        sig={sig}
+                        opened={!!m.engagedAt}
+                        submitted={!!m.submittedAt}
+                      />
+                    </TableCell>
+                    <TableCell className="text-right text-sm tabular-nums text-muted-foreground">
+                      {m.remindersSent}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {m.lastSentAt ? relTime(m.lastSentAt) : "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <a
+                        href={`/onboard/${m.token}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-0.5"
+                      >
+                        Form
+                        <ExternalLink className="size-3" />
+                      </a>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         )}
@@ -564,6 +632,76 @@ function CampaignStatusBadge({ status }: { status: string }) {
     <Badge variant={variant} className="text-[10px] uppercase tracking-wide">
       {status}
     </Badge>
+  );
+}
+
+/**
+ * Tiny chip cluster summarizing what's happened to a single campaign
+ * member: WhatsApp sent/failed, email sent/opened/clicked, plus the
+ * form-side "opened" (engagedAt) and "submitted" markers from the
+ * onboarding renderer.
+ *
+ * We collapse states aggressively — "clicked" implies "opened" implies
+ * "sent", so we only render the most informative one for email. Errors
+ * (FAILED / BOUNCED) get their own red pill.
+ */
+function ActivityPills({
+  sig,
+  opened,
+  submitted,
+}: {
+  sig:
+    | {
+        waSent: boolean;
+        waFailed: boolean;
+        emailSent: boolean;
+        emailOpened: boolean;
+        emailClicked: boolean;
+        emailFailed: boolean;
+      }
+    | undefined;
+  opened: boolean;
+  submitted: boolean;
+}) {
+  if (!sig) return <span className="text-xs text-muted-foreground">—</span>;
+
+  const items: { label: string; tone: "default" | "success" | "muted" | "destructive" }[] = [];
+
+  if (sig.waSent) items.push({ label: "WA sent", tone: "muted" });
+  if (sig.waFailed) items.push({ label: "WA failed", tone: "destructive" });
+
+  if (sig.emailClicked) items.push({ label: "Email clicked", tone: "success" });
+  else if (sig.emailOpened) items.push({ label: "Email opened", tone: "success" });
+  else if (sig.emailSent) items.push({ label: "Email sent", tone: "muted" });
+  if (sig.emailFailed) items.push({ label: "Email failed", tone: "destructive" });
+
+  if (opened && !submitted) items.push({ label: "Link opened", tone: "default" });
+  if (submitted) items.push({ label: "Submitted", tone: "success" });
+
+  if (items.length === 0)
+    return <span className="text-xs text-muted-foreground">—</span>;
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {items.map((it, i) => {
+        const cls =
+          it.tone === "success"
+            ? "bg-success/15 text-success border-success/20"
+            : it.tone === "destructive"
+              ? "bg-destructive/15 text-destructive border-destructive/20"
+              : it.tone === "muted"
+                ? "bg-muted text-muted-foreground border-border"
+                : "bg-foreground/10 text-foreground border-border";
+        return (
+          <span
+            key={i}
+            className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${cls}`}
+          >
+            {it.label}
+          </span>
+        );
+      })}
+    </div>
   );
 }
 

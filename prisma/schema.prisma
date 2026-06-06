@@ -101,6 +101,18 @@ enum WhatsAppMessageStatus {
   FAILED
 }
 
+/// How outbound campaign sends are paced.
+///   IMMEDIATE — old behavior: launch fires a paced loop with 3-10s gaps.
+///              Fine for tiny bursts; risky at scale.
+///   PACED    — scheduler computes a per-member scheduledSendAt across the
+///              dispatchTTLHours window, respecting quiet hours and an
+///              hourly target. Cron /api/cron/dispatch ticks every minute
+///              and fires whatever is due. Safe for bulk outreach.
+enum CampaignDispatchMode {
+  IMMEDIATE
+  PACED
+}
+
 enum EmailMessageStatus {
   QUEUED
   SENDING
@@ -397,6 +409,31 @@ model Campaign {
   launchFailed             Int            @default(0)
   launchError              String?
 
+  // ───────────── Bulk dispatch throttling ─────────────
+  // Used when the campaign sends out invites/reminders to many providers.
+  // Transactional sends (form submission confirmation, profile activation,
+  // etc.) bypass these and go out immediately via sendTransactional().
+  dispatchMode             CampaignDispatchMode @default(PACED)
+  /// Target messages per hour. WhatsApp anti-spam fires above ~30/hr
+  /// sustained for a single number. Default 27 with random jitter.
+  hourlyTarget             Int            @default(27)
+  /// Cohort size range — each hour, we pick a random size in
+  /// [cohortMin, cohortMax] of pending members for that hour. Adds
+  /// per-hour entropy on top of the inter-message jitter.
+  cohortMin                Int            @default(35)
+  cohortMax                Int            @default(50)
+  /// How many hours we're willing to spread sends across. If there
+  /// are more leads than hourlyTarget * dispatchTTLHours, the overflow
+  /// either rolls into more hours or gets logged as un-sent (TBD).
+  dispatchTTLHours         Int            @default(48)
+  /// Quiet hours — local time bounds, no sends outside these.
+  /// Defaults to IST waking hours (8am-9pm).
+  quietHourStart           Int            @default(8)
+  quietHourEnd             Int            @default(21)
+  /// IANA timezone used to interpret quietHourStart/End. Stored so
+  /// global campaigns can override per-region.
+  dispatchTimezone         String         @default("Asia/Kolkata")
+
   createdAt                DateTime       @default(now())
   updatedAt                DateTime       @updatedAt
 
@@ -428,6 +465,11 @@ model CampaignMember {
   submittedAt     DateTime?
   completedAt     DateTime?
   optedOutAt      DateTime?
+  /// When this member is scheduled to receive the invite. Set by the
+  /// scheduler at launch time for PACED campaigns; null for IMMEDIATE.
+  /// Cron /api/cron/dispatch picks up members where this is <= now() and
+  /// status is still PENDING.
+  scheduledSendAt DateTime?
   /// Unique token used in the form magic-link URL for this (campaign, provider)
   /// pair. Lets us identify who opened/submitted without a login.
   token           String                @unique @default(cuid())
@@ -441,6 +483,7 @@ model CampaignMember {
   @@unique([campaignId, careProviderId])
   @@index([status])
   @@index([careProviderId])
+  @@index([scheduledSendAt, status])
 }
 
 // ============================================================================

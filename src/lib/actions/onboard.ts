@@ -356,6 +356,23 @@ export async function submitOnboarding(token: string, formData: FormData) {
     }),
   ]);
 
+  // Fire-and-forget thank-you message. Don't block the redirect on this.
+  // sendTransactional() respects opted-out + missing-channel cases internally.
+  void (async () => {
+    try {
+      const { sendTransactional } = await import("@/lib/dispatch/transactional");
+      await sendTransactional({
+        careProviderId: member.careProviderId,
+        templateCode: "form_submitted_thanks",
+      });
+    } catch (err) {
+      console.error(
+        "[submitOnboarding] thank-you send failed (non-fatal):",
+        err,
+      );
+    }
+  })();
+
   revalidatePath(`/onboard/${token}`);
   redirect(`/onboard/${token}/thanks`);
 }

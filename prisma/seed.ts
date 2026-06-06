@@ -1073,11 +1073,63 @@ const messageTemplates = [
     variables: ["name"],
   },
   {
+    code: "form_submitted_thanks_email",
+    name: "Form-submitted confirmation — Email",
+    kind: "CONFIRMATION" as const,
+    channel: "EMAIL" as const,
+    subject: "Thanks {{name}} — we got your profile",
+    body:
+      "Hi {{name}},\n\nThanks for completing your profile on Labstack Network. Our team will verify your details over the next 24-48 hours, and then you'll start receiving job offers in your area on WhatsApp.\n\n— Labstack",
+    html:
+      "<!doctype html><html><body style=\"font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#18181b;max-width:560px;margin:0 auto;padding:24px;\">\n  <h1 style=\"font-size:20px;margin:0 0 16px;\">Thanks, {{name}} ✅</h1>\n  <p>We've saved your profile. Our team will verify it over the next 24–48 hours, then you'll start receiving job offers in your area on WhatsApp.</p>\n  <p style=\"color:#71717a;font-size:13px;margin-top:24px;\">— Labstack Network</p>\n</body></html>",
+    variables: ["name"],
+  },
+  {
     code: "verified_active",
     name: "Profile verified — activation",
     kind: "ACTIVATION" as const,
     body:
       "🎉 Welcome aboard, {{name}}!\n\nYour profile is verified. From now on, you'll get job offers via WhatsApp. Just reply YES to the ones you want.",
+    variables: ["name"],
+  },
+  {
+    code: "profile_activated",
+    name: "Profile activated — WhatsApp",
+    kind: "ACTIVATION" as const,
+    body:
+      "🎉 Hi {{name}}, your profile has been verified and you're now active on the platform.\n\nWe'll start sending you job offers in your area on WhatsApp. Reply YES to ones you want to take up.\n\n— Labstack",
+    variables: ["name"],
+  },
+  {
+    code: "profile_activated_email",
+    name: "Profile activated — Email",
+    kind: "ACTIVATION" as const,
+    channel: "EMAIL" as const,
+    subject: "You're activated on Labstack Network 🎉",
+    body:
+      "Hi {{name}},\n\nGood news — your profile has been verified and your account is active on Labstack Network.\n\nWe'll start sending you job offers in your area. You'll get them on WhatsApp; reply YES to the ones you want.\n\n— Labstack",
+    html:
+      "<!doctype html><html><body style=\"font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#18181b;max-width:560px;margin:0 auto;padding:24px;\">\n  <h1 style=\"font-size:20px;margin:0 0 16px;\">You're activated 🎉</h1>\n  <p>Hi {{name}}, your profile has been verified.</p>\n  <p>From now on you'll receive job opportunities on WhatsApp. Reply <strong>YES</strong> to any offer you'd like to take up.</p>\n  <p style=\"color:#71717a;font-size:13px;margin-top:24px;\">— Labstack Network</p>\n</body></html>",
+    variables: ["name"],
+  },
+  {
+    code: "profile_rejected",
+    name: "Profile rejected — WhatsApp",
+    kind: "REJECTION" as const,
+    body:
+      "Hi {{name}}, thanks for completing your Labstack profile.\n\nUnfortunately we can't onboard you right now. Reach out to support if you'd like to know more or update your details.\n\n— Labstack",
+    variables: ["name"],
+  },
+  {
+    code: "profile_rejected_email",
+    name: "Profile rejected — Email",
+    kind: "REJECTION" as const,
+    channel: "EMAIL" as const,
+    subject: "Your Labstack application — update",
+    body:
+      "Hi {{name}},\n\nThanks for completing your Labstack profile. After review we're not able to onboard you at this time.\n\nIf you'd like to update your details or talk to our team, reply to this email and we'll be in touch.\n\n— Labstack",
+    html:
+      "<!doctype html><html><body style=\"font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#18181b;max-width:560px;margin:0 auto;padding:24px;\">\n  <p>Hi {{name}},</p>\n  <p>Thanks for completing your Labstack profile. After review we're not able to onboard you at this time.</p>\n  <p>If you'd like to update your details or talk to our team, just reply to this email.</p>\n  <p style=\"color:#71717a;font-size:13px;margin-top:24px;\">— Labstack Network</p>\n</body></html>",
     variables: ["name"],
   },
   {

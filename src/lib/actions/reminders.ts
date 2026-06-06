@@ -306,17 +306,33 @@ async function findTargets(rule: {
   switch (rule.kind) {
     case "CAMPAIGN_FOLLOWUP": {
       if (!rule.campaignId) return [];
+      // Two follow-up shapes, both gated by the rule's delay window:
+      //   - SENT members: invite was sent ≥ delayHours ago, no engagement yet.
+      //   - ENGAGED members: form opened ≥ delayHours ago, no submit yet.
+      // The delay anchor differs (lastSentAt vs engagedAt) so we OR them.
+      const wantedStatuses = (targetStatuses.length > 0
+        ? targetStatuses
+        : ["SENT", "ENGAGED"]) as Prisma.EnumCampaignMemberStatusFilter["in"];
       const members = await prisma.campaignMember.findMany({
         where: {
           campaignId: rule.campaignId,
-          status: {
-            in: (targetStatuses.length > 0
-              ? targetStatuses
-              : ["SENT", "ENGAGED"]) as Prisma.EnumCampaignMemberStatusFilter["in"],
-          },
-          // Only members whose invite was sent before the delay cutoff
-          lastSentAt: { lte: cutoff },
+          status: { in: wantedStatuses },
           careProvider: { optedOutAt: null },
+          // Don't nudge anyone who already finished the form.
+          submittedAt: null,
+          OR: [
+            // SENT path: anchor on last invite send.
+            {
+              status: "SENT",
+              lastSentAt: { lte: cutoff },
+            },
+            // ENGAGED path: anchor on form open. If the form was opened
+            // N hours ago and still no submission, fire the nudge.
+            {
+              status: "ENGAGED",
+              engagedAt: { lte: cutoff },
+            },
+          ],
         },
         include: { careProvider: true },
       });

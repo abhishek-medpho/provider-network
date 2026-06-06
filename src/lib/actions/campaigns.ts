@@ -395,6 +395,7 @@ export async function launchCampaign(
   ok: boolean;
   total?: number;
   started?: boolean;
+  scheduledWindow?: { firstSendAt: Date | null; lastSendAt: Date | null };
   error?: string;
 }> {
   await requireAdmin();
@@ -403,19 +404,21 @@ export async function launchCampaign(
     where: { id },
     include: {
       inviteMessageTemplate: { select: { id: true } },
+      inviteEmailTemplate: { select: { id: true } },
       formTemplate: { select: { id: true } },
     },
   });
   if (!campaign) return { ok: false, error: "Campaign not found" };
-  if (!campaign.inviteMessageTemplate)
-    return { ok: false, error: "No invite message template configured" };
+  if (
+    !campaign.inviteMessageTemplate &&
+    !campaign.inviteEmailTemplate
+  )
+    return {
+      ok: false,
+      error: "No invite template configured for the selected strategy",
+    };
   if (!campaign.formTemplate)
     return { ok: false, error: "No form template configured" };
-
-  // How many PENDING members would actually receive a send?
-  const throttle =
-    (campaign.throttle as { maxSendsPerLaunch?: number; maxSendsPerDay?: number } | null) ?? {};
-  const cap = throttle.maxSendsPerLaunch ?? throttle.maxSendsPerDay ?? 100;
 
   const eligible = await prisma.campaignMember.count({
     where: {
@@ -429,10 +432,64 @@ export async function launchCampaign(
     return { ok: true, total: 0, started: false };
   }
 
+  // PACED mode: the scheduler decides every member's send time. The
+  // cron picks them up. No background loop; UI shows progress via the
+  // existing /launch-status endpoint.
+  if (campaign.dispatchMode === "PACED") {
+    const { planLaunchSchedule } = await import("@/lib/dispatch/scheduler");
+
+    const claim = await prisma.campaign.updateMany({
+      where: { id, launchInProgress: false },
+      data: {
+        launchInProgress: true,
+        launchStartedAt: new Date(),
+        launchCompletedAt: null,
+        launchSent: 0,
+        launchFailed: 0,
+        launchError: null,
+        ...(campaign.status === "DRAFT"
+          ? { status: "RUNNING", startedAt: new Date() }
+          : {}),
+      },
+    });
+    if (claim.count === 0) {
+      return { ok: false, error: "A launch is already in progress." };
+    }
+
+    const plan = await planLaunchSchedule({
+      campaignId: id,
+      hourlyTarget: campaign.hourlyTarget,
+      cohortMin: campaign.cohortMin,
+      cohortMax: campaign.cohortMax,
+      dispatchTTLHours: campaign.dispatchTTLHours,
+      quietHourStart: campaign.quietHourStart,
+      quietHourEnd: campaign.quietHourEnd,
+      timezone: campaign.dispatchTimezone,
+    });
+
+    await prisma.campaign.update({
+      where: { id },
+      data: { launchTotal: plan.scheduled },
+    });
+
+    revalidatePath(`/admin/campaigns/${id}`);
+    return {
+      ok: true,
+      total: plan.scheduled,
+      started: true,
+      scheduledWindow: {
+        firstSendAt: plan.firstSendAt,
+        lastSendAt: plan.lastSendAt,
+      },
+    };
+  }
+
+  // ─── IMMEDIATE mode (legacy / urgent re-launch) ───
+  const throttle =
+    (campaign.throttle as { maxSendsPerLaunch?: number; maxSendsPerDay?: number } | null) ?? {};
+  const cap = throttle.maxSendsPerLaunch ?? throttle.maxSendsPerDay ?? 100;
   const total = Math.min(eligible, cap);
 
-  // Claim the lock atomically. updateMany with `where: launchInProgress: false`
-  // prevents a second launch click from spawning a parallel loop.
   const claim = await prisma.campaign.updateMany({
     where: { id, launchInProgress: false },
     data: {
@@ -452,9 +509,6 @@ export async function launchCampaign(
     return { ok: false, error: "A launch is already in progress." };
   }
 
-  // Fire-and-forget the actual send loop. We deliberately do NOT await it —
-  // the action returns now and the loop continues in the background.
-  // Errors are caught + persisted via the lock-release in finally().
   void dispatchInvitesAsync(id).catch((err) => {
     console.error(`[launchCampaign] dispatch failed for ${id}:`, err);
   });
