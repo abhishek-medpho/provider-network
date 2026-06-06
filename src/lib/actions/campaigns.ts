@@ -462,8 +462,8 @@ export async function launchCampaign(
       cohortMin: campaign.cohortMin,
       cohortMax: campaign.cohortMax,
       dispatchTTLHours: campaign.dispatchTTLHours,
-      quietHourStart: campaign.quietHourStart,
-      quietHourEnd: campaign.quietHourEnd,
+      activeHourStart: campaign.activeHourStart,
+      activeHourEnd: campaign.activeHourEnd,
       timezone: campaign.dispatchTimezone,
     });
 

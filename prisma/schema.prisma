@@ -426,11 +426,13 @@ model Campaign {
   /// are more leads than hourlyTarget * dispatchTTLHours, the overflow
   /// either rolls into more hours or gets logged as un-sent (TBD).
   dispatchTTLHours         Int            @default(48)
-  /// Quiet hours — local time bounds, no sends outside these.
-  /// Defaults to IST waking hours (8am-9pm).
-  quietHourStart           Int            @default(8)
-  quietHourEnd             Int            @default(21)
-  /// IANA timezone used to interpret quietHourStart/End. Stored so
+  /// Active sending window — local-time bounds during which sends may
+  /// fire. Outside this window is "quiet hours" (no sends). Defaults to
+  /// IST waking hours (8am–9pm) so we don't ping providers in the middle
+  /// of the night.
+  activeHourStart          Int            @default(8)
+  activeHourEnd            Int            @default(21)
+  /// IANA timezone used to interpret activeHourStart/End. Stored so
   /// global campaigns can override per-region.
   dispatchTimezone         String         @default("Asia/Kolkata")
 

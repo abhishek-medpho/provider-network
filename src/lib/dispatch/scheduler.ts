@@ -30,8 +30,10 @@ type PlanInput = {
   cohortMin: number;
   cohortMax: number;
   dispatchTTLHours: number;
-  quietHourStart: number;
-  quietHourEnd: number;
+  /** Local hour at which sends START being allowed (e.g. 8 = 8 AM). */
+  activeHourStart: number;
+  /** Local hour at which sends STOP being allowed (e.g. 21 = 9 PM). */
+  activeHourEnd: number;
   timezone: string;
 };
 
@@ -81,7 +83,7 @@ export async function planLaunchSchedule(
   // dispatchTTLHours budget.
   const now = new Date();
   const updates: { id: string; sendAt: Date }[] = [];
-  let cursor = nextValidHourStart(now, input.quietHourStart, input.quietHourEnd, input.timezone);
+  let cursor = nextValidHourStart(now, input.activeHourStart, input.activeHourEnd, input.timezone);
   let memberIdx = 0;
   let hoursUsed = 0;
 
@@ -121,8 +123,8 @@ export async function planLaunchSchedule(
 
     cursor = nextValidHourStart(
       new Date(cursor.getTime() + 60 * 60 * 1000),
-      input.quietHourStart,
-      input.quietHourEnd,
+      input.activeHourStart,
+      input.activeHourEnd,
       input.timezone,
     );
     hoursUsed++;
@@ -182,8 +184,10 @@ function randomInt(min: number, max: number): number {
 }
 
 /**
- * Return the start of the next valid (non-quiet) hour at or after `from`,
- * interpreted in the given timezone.
+ * Return the start of the next hour at or after `from` that falls inside
+ * the [activeHourStart, activeHourEnd) window in the given timezone.
+ * "Quiet hours" = everything outside this window; cursor skips forward
+ * until it lands back inside the active window.
  *
  * Implementation: format `from` in the target timezone, read the hour,
  * and step forward in 1-hour increments until we land in [start, end).
@@ -193,8 +197,8 @@ function randomInt(min: number, max: number): number {
  */
 function nextValidHourStart(
   from: Date,
-  startHour: number,
-  endHour: number,
+  activeStart: number,
+  activeEnd: number,
   timezone: string,
 ): Date {
   // Truncate to the top of the hour to make iteration deterministic.
@@ -210,10 +214,10 @@ function nextValidHourStart(
   for (let i = 0; i < 24 * 7; i++) {
     const hourPart = parseInt(fmt.format(cursor), 10);
     const inWindow =
-      startHour < endHour
-        ? hourPart >= startHour && hourPart < endHour
+      activeStart < activeEnd
+        ? hourPart >= activeStart && hourPart < activeEnd
         : // wrap-around window (e.g. 22:00 → 6:00) — treat as union
-          hourPart >= startHour || hourPart < endHour;
+          hourPart >= activeStart || hourPart < activeEnd;
     if (inWindow) return cursor;
     cursor = new Date(cursor.getTime() + 60 * 60 * 1000);
   }
