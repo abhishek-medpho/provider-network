@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { createJob } from "@/lib/actions/jobs";
+import { SkillsPicker, type SkillAttribute } from "../_components/SkillsPicker";
 import {
   Card,
   CardContent,
@@ -17,11 +18,30 @@ import { Textarea } from "@/components/ui/textarea";
 export const metadata = { title: "New job" };
 
 export default async function NewJobPage() {
-  const profileTypes = await prisma.profileType.findMany({
-    where: { active: true },
-    orderBy: { sortOrder: "asc" },
-    select: { id: true, label: true },
-  });
+  const [profileTypes, skillAttrs] = await Promise.all([
+    prisma.profileType.findMany({
+      where: { active: true },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, label: true },
+    }),
+    prisma.attribute.findMany({
+      where: {
+        type: { in: ["MULTI_SELECT", "SINGLE_SELECT"] },
+        category: { in: ["skills", "service"] },
+        archivedAt: null,
+      },
+      orderBy: { label: "asc" },
+      select: { key: true, label: true, options: true },
+    }),
+  ]);
+
+  const skillAttributes: SkillAttribute[] = skillAttrs.map((a) => ({
+    key: a.key,
+    label: a.label,
+    options: Array.isArray(a.options)
+      ? (a.options as { value: string; label: string }[])
+      : [],
+  }));
 
   return (
     <div className="p-6 md:p-8 space-y-5 max-w-3xl">
@@ -139,6 +159,19 @@ export default async function NewJobPage() {
                 />
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Required skills</CardTitle>
+            <CardDescription>
+              Optional. A provider matches only if they have every checked
+              skill. Leave empty to match any provider of this role in range.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SkillsPicker attributes={skillAttributes} />
           </CardContent>
         </Card>
 

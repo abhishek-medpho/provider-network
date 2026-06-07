@@ -15,6 +15,34 @@ async function requireAdmin() {
   return session.user;
 }
 
+/**
+ * Parse the SkillsPicker's hidden JSON input into a clean, validated
+ * requiredSkills array. Drops malformed entries + empty value lists so a
+ * tampered or stale payload can't break matching.
+ */
+function parseRequiredSkills(formData: FormData): Prisma.InputJsonValue {
+  const raw = String(formData.get("requiredSkills") ?? "").trim();
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(
+        (r) =>
+          r &&
+          typeof r.attributeKey === "string" &&
+          Array.isArray(r.values) &&
+          r.values.length > 0,
+      )
+      .map((r) => ({
+        attributeKey: String(r.attributeKey),
+        values: r.values.map(String),
+      }));
+  } catch {
+    return [];
+  }
+}
+
 export async function createJob(formData: FormData) {
   await requireAdmin();
 
@@ -40,6 +68,7 @@ export async function createJob(formData: FormData) {
       lat,
       lng,
       radiusKm,
+      requiredSkills: parseRequiredSkills(formData),
       shiftType: String(formData.get("shiftType") ?? "").trim() || null,
       payText: String(formData.get("payText") ?? "").trim() || null,
       slots,
@@ -69,6 +98,7 @@ export async function updateJob(id: string, formData: FormData) {
       lat: latRaw ? Number(latRaw) : null,
       lng: lngRaw ? Number(lngRaw) : null,
       radiusKm: Number(formData.get("radiusKm") ?? 10) || 10,
+      requiredSkills: parseRequiredSkills(formData),
       shiftType: String(formData.get("shiftType") ?? "").trim() || null,
       payText: String(formData.get("payText") ?? "").trim() || null,
       slots: Math.max(1, Number(formData.get("slots") ?? 1) || 1),

@@ -3,8 +3,13 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, MapPin, Users } from "lucide-react";
 import { matchProvidersForJob } from "@/lib/jobs/matching";
-import { dispatchJobOffers, setJobStatus } from "@/lib/actions/jobs";
+import { dispatchJobOffers, setJobStatus, updateJob } from "@/lib/actions/jobs";
 import { DispatchOffers } from "./_components/DispatchOffers";
+import {
+  SkillsPicker,
+  type SkillAttribute,
+  type RequiredSkill,
+} from "../_components/SkillsPicker";
 import {
   Card,
   CardContent,
@@ -14,6 +19,9 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -57,6 +65,27 @@ export default async function JobDetailPage({
   // Live match preview (excludes already-offered providers).
   const candidates = await matchProvidersForJob(id, { limit: 100 });
 
+  // Skill attributes for the edit picker.
+  const skillAttrs = await prisma.attribute.findMany({
+    where: {
+      type: { in: ["MULTI_SELECT", "SINGLE_SELECT"] },
+      category: { in: ["skills", "service"] },
+      archivedAt: null,
+    },
+    orderBy: { label: "asc" },
+    select: { key: true, label: true, options: true },
+  });
+  const skillAttributes: SkillAttribute[] = skillAttrs.map((a) => ({
+    key: a.key,
+    label: a.label,
+    options: Array.isArray(a.options)
+      ? (a.options as { value: string; label: string }[])
+      : [],
+  }));
+  const existingSkills: RequiredSkill[] = Array.isArray(job.requiredSkills)
+    ? (job.requiredSkills as RequiredSkill[])
+    : [];
+
   const acceptedCount = job.offers.filter(
     (o) => o.status === "ACCEPTED",
   ).length;
@@ -64,6 +93,10 @@ export default async function JobDetailPage({
   async function dispatchAction() {
     "use server";
     return await dispatchJobOffers(id);
+  }
+  async function editAction(formData: FormData) {
+    "use server";
+    await updateJob(id, formData);
   }
   async function closeAction() {
     "use server";
@@ -245,6 +278,106 @@ export default async function JobDetailPage({
               </TableBody>
             </Table>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Edit job */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Edit job</CardTitle>
+          <CardDescription>
+            Changing location or skills updates the matched-providers list
+            above.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form action={editAction} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="title">Title</Label>
+              <Input id="title" name="title" defaultValue={job.title} required />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                name="description"
+                rows={2}
+                defaultValue={job.description ?? ""}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="pincode">Pincode</Label>
+                <Input
+                  id="pincode"
+                  name="pincode"
+                  defaultValue={job.pincode ?? ""}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="radiusKm">Radius (km)</Label>
+                <Input
+                  id="radiusKm"
+                  name="radiusKm"
+                  type="number"
+                  min={1}
+                  defaultValue={job.radiusKm}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="lat">Latitude</Label>
+                <Input id="lat" name="lat" defaultValue={job.lat ?? ""} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="lng">Longitude</Label>
+                <Input id="lng" name="lng" defaultValue={job.lng ?? ""} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="shiftType">Shift</Label>
+                <Input
+                  id="shiftType"
+                  name="shiftType"
+                  defaultValue={job.shiftType ?? ""}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="payText">Pay</Label>
+                <Input
+                  id="payText"
+                  name="payText"
+                  defaultValue={job.payText ?? ""}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="slots">Slots</Label>
+                <Input
+                  id="slots"
+                  name="slots"
+                  type="number"
+                  min={1}
+                  defaultValue={job.slots}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="offerTTLHours">Offer expiry (hours)</Label>
+                <Input
+                  id="offerTTLHours"
+                  name="offerTTLHours"
+                  type="number"
+                  min={1}
+                  defaultValue={job.offerTTLHours}
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Required skills</Label>
+              <SkillsPicker
+                attributes={skillAttributes}
+                initial={existingSkills}
+              />
+            </div>
+            <Button type="submit">Save job</Button>
+          </form>
         </CardContent>
       </Card>
     </div>

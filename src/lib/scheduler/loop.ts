@@ -43,6 +43,9 @@ export function startInProcessScheduler(): void {
         `[scheduler] dispatch tick: ${r.sent} sent, ${r.failed} failed across ${r.campaignsProcessed} campaign(s)`,
       );
     }
+    // Expire stale job offers on the same cadence — cheap single UPDATE.
+    const { runExpiryTick } = await import("@/lib/jobs/expiry");
+    await runExpiryTick();
   });
 
   scheduleRecurring("reminders", REMINDER_INTERVAL_MS, async () => {
