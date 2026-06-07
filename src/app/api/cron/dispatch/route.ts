@@ -18,9 +18,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
-import { dueForDispatch } from "@/lib/dispatch/scheduler";
-import { dispatchInviteToMember } from "@/lib/dispatch/dispatch";
+import { runDispatchTick } from "@/lib/dispatch/runners";
 
 const CRON_SECRET = process.env.CRON_SECRET;
 
@@ -48,77 +46,10 @@ async function handle(req: NextRequest) {
     );
   }
 
-  // PACED campaigns with an active launch.
-  const campaigns = await prisma.campaign.findMany({
-    where: {
-      dispatchMode: "PACED",
-      launchInProgress: true,
-      status: { in: ["RUNNING", "DRAFT"] },
-    },
-    select: {
-      id: true,
-      hourlyTarget: true,
-      launchSent: true,
-      launchFailed: true,
-      launchTotal: true,
-    },
-  });
+  const result = await runDispatchTick();
 
-  const results: Array<{
-    campaignId: string;
-    attempted: number;
-    sent: number;
-    failed: number;
-  }> = [];
-
-  for (const c of campaigns) {
-    const dueIds = await dueForDispatch(c.id, c.hourlyTarget);
-    let sent = 0;
-    let failed = 0;
-    for (const id of dueIds) {
-      const r = await dispatchInviteToMember(id);
-      if (r.anySuccess) sent++;
-      else failed++;
-    }
-
-    if (sent + failed > 0) {
-      await prisma.campaign.update({
-        where: { id: c.id },
-        data: {
-          launchSent: { increment: sent },
-          launchFailed: { increment: failed },
-        },
-      });
-    }
-
-    // Auto-complete the launch when nothing's left to send.
-    const remaining = await prisma.campaignMember.count({
-      where: {
-        campaignId: c.id,
-        status: "PENDING",
-        lastSentAt: null,
-        scheduledSendAt: { not: null },
-      },
-    });
-    if (remaining === 0) {
-      await prisma.campaign.update({
-        where: { id: c.id },
-        data: {
-          launchInProgress: false,
-          launchCompletedAt: new Date(),
-        },
-      });
-    }
-
-    results.push({
-      campaignId: c.id,
-      attempted: dueIds.length,
-      sent,
-      failed,
-    });
-  }
-
-  return NextResponse.json({ ok: true, results }, {
-    headers: { "cache-control": "no-store" },
-  });
+  return NextResponse.json(
+    { ok: true, ...result },
+    { headers: { "cache-control": "no-store" } },
+  );
 }

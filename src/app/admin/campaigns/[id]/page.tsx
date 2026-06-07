@@ -28,6 +28,7 @@ import {
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -187,6 +188,13 @@ export default async function CampaignDetailPage({
   async function settingsAction(formData: FormData) {
     "use server";
     await updateCampaignSettings(id, formData);
+  }
+  async function dispatchAction(formData: FormData) {
+    "use server";
+    const { updateCampaignDispatch } = await import(
+      "@/lib/actions/campaigns"
+    );
+    await updateCampaignDispatch(id, formData);
   }
   async function uploadAction(formData: FormData) {
     "use server";
@@ -607,6 +615,122 @@ export default async function CampaignDetailPage({
             </div>
 
             <Button type="submit">Save settings</Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* Dispatch / throttle settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Dispatch & throttling</CardTitle>
+          <CardDescription>
+            Controls how fast invites go out. PACED mode spreads sends across
+            cohorts over time to stay under WhatsApp&apos;s spam radar.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form action={dispatchAction} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="dispatchMode">Mode</Label>
+                <select
+                  id="dispatchMode"
+                  name="dispatchMode"
+                  defaultValue={campaign.dispatchMode}
+                  className="w-full h-9 px-3 rounded-md border bg-background text-sm"
+                >
+                  <option value="PACED">
+                    PACED — cohorts over time (recommended)
+                  </option>
+                  <option value="IMMEDIATE">
+                    IMMEDIATE — send now (small/urgent only)
+                  </option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="hourlyTarget">Messages per hour</Label>
+                <Input
+                  id="hourlyTarget"
+                  type="number"
+                  name="hourlyTarget"
+                  min={1}
+                  max={60}
+                  defaultValue={campaign.hourlyTarget}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Keep ≤ 30 for cold WhatsApp outreach.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cohortMin">Cohort min</Label>
+                <Input
+                  id="cohortMin"
+                  type="number"
+                  name="cohortMin"
+                  min={1}
+                  defaultValue={campaign.cohortMin}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cohortMax">Cohort max</Label>
+                <Input
+                  id="cohortMax"
+                  type="number"
+                  name="cohortMax"
+                  min={1}
+                  defaultValue={campaign.cohortMax}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Random batch size picked each hour.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="activeHourStart">Active from (hour)</Label>
+                <Input
+                  id="activeHourStart"
+                  type="number"
+                  name="activeHourStart"
+                  min={0}
+                  max={23}
+                  defaultValue={campaign.activeHourStart}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="activeHourEnd">Active until (hour)</Label>
+                <Input
+                  id="activeHourEnd"
+                  type="number"
+                  name="activeHourEnd"
+                  min={0}
+                  max={23}
+                  defaultValue={campaign.activeHourEnd}
+                />
+                <p className="text-xs text-muted-foreground">
+                  24h clock. Outside this = quiet hours (no sends).
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="dispatchTTLHours">Spread over (hours)</Label>
+                <Input
+                  id="dispatchTTLHours"
+                  type="number"
+                  name="dispatchTTLHours"
+                  min={1}
+                  defaultValue={campaign.dispatchTTLHours}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="dispatchTimezone">Timezone</Label>
+                <Input
+                  id="dispatchTimezone"
+                  type="text"
+                  name="dispatchTimezone"
+                  defaultValue={campaign.dispatchTimezone}
+                  placeholder="Asia/Kolkata"
+                />
+              </div>
+            </div>
+            <Button type="submit">Save dispatch settings</Button>
           </form>
         </CardContent>
       </Card>

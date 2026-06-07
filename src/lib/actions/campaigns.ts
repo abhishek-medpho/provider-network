@@ -162,6 +162,55 @@ export async function updateCampaignSettings(id: string, formData: FormData) {
   revalidatePath(`/admin/campaigns/${id}`);
 }
 
+/**
+ * Update a campaign's dispatch/throttle knobs from the "Dispatch &
+ * throttling" card. Clamps values to sane ranges so a fat-fingered
+ * hourlyTarget=9999 can't blow past WhatsApp's spam threshold.
+ */
+export async function updateCampaignDispatch(id: string, formData: FormData) {
+  await requireAdmin();
+
+  const modeRaw = String(formData.get("dispatchMode") ?? "PACED");
+  const dispatchMode = modeRaw === "IMMEDIATE" ? "IMMEDIATE" : "PACED";
+
+  const clamp = (v: number, lo: number, hi: number) =>
+    Math.max(lo, Math.min(hi, Math.round(v)));
+
+  const hourlyTarget = clamp(Number(formData.get("hourlyTarget") ?? 27), 1, 60);
+  let cohortMin = clamp(Number(formData.get("cohortMin") ?? 35), 1, 500);
+  let cohortMax = clamp(Number(formData.get("cohortMax") ?? 50), 1, 500);
+  if (cohortMin > cohortMax) [cohortMin, cohortMax] = [cohortMax, cohortMin];
+
+  const activeHourStart = clamp(
+    Number(formData.get("activeHourStart") ?? 8),
+    0,
+    23,
+  );
+  const activeHourEnd = clamp(Number(formData.get("activeHourEnd") ?? 21), 0, 23);
+  const dispatchTTLHours = clamp(
+    Number(formData.get("dispatchTTLHours") ?? 48),
+    1,
+    24 * 30,
+  );
+  const dispatchTimezone =
+    String(formData.get("dispatchTimezone") ?? "").trim() || "Asia/Kolkata";
+
+  await prisma.campaign.update({
+    where: { id },
+    data: {
+      dispatchMode,
+      hourlyTarget,
+      cohortMin,
+      cohortMax,
+      activeHourStart,
+      activeHourEnd,
+      dispatchTTLHours,
+      dispatchTimezone,
+    },
+  });
+  revalidatePath(`/admin/campaigns/${id}`);
+}
+
 function parseReminderRulesFromForm(formData: FormData) {
   const rules: Array<{
     triggerAfterHours: number;
