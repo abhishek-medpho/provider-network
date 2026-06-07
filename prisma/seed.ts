@@ -1085,6 +1085,33 @@ const messageTemplates = [
     variables: ["name"],
   },
   {
+    code: "job_offer",
+    name: "Job offer — WhatsApp",
+    kind: "CUSTOM" as const,
+    body:
+      "Hi {{name}}! 💼\n\nNew job near you:\n*{{job_title}}*\n{{shift}} · {{pay}}\nArea: {{pincode}}\n\nTap to accept or decline:\n{{offer_link}}",
+    variables: [
+      "name",
+      "job_title",
+      "shift",
+      "pay",
+      "pincode",
+      "offer_link",
+    ],
+  },
+  {
+    code: "job_offer_email",
+    name: "Job offer — Email",
+    kind: "CUSTOM" as const,
+    channel: "EMAIL" as const,
+    subject: "New job near you: {{job_title}}",
+    body:
+      "Hi {{name}},\n\nA new job has come up near you:\n\n{{job_title}}\n{{shift}} · {{pay}}\nArea: {{pincode}}\n\nAccept or decline here: {{offer_link}}\n\n— Labstack",
+    html:
+      "<!doctype html><html><body style=\"font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#18181b;max-width:560px;margin:0 auto;padding:24px;\">\n  <h1 style=\"font-size:20px;margin:0 0 12px;\">💼 {{job_title}}</h1>\n  <p style=\"margin:0 0 4px;\"><strong>{{shift}}</strong> · {{pay}}</p>\n  <p style=\"margin:0 0 20px;color:#71717a;\">Area: {{pincode}}</p>\n  <p style=\"margin:24px 0;\">\n    <a href=\"{{offer_link}}\" style=\"display:inline-block;background:#18181b;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600;\">View &amp; respond</a>\n  </p>\n  <p style=\"color:#71717a;font-size:13px;margin-top:24px;\">— Labstack Network</p>\n</body></html>",
+    variables: ["name", "job_title", "shift", "pay", "pincode", "offer_link"],
+  },
+  {
     code: "verified_active",
     name: "Profile verified — activation",
     kind: "ACTIVATION" as const,

@@ -242,6 +242,7 @@ model ProfileType {
   campaigns             Campaign[]
   careProviders         CareProvider[]
   messageTemplates      MessageTemplate[]
+  jobs                  Job[]
 
   @@index([active])
 }
@@ -533,6 +534,7 @@ model CareProvider {
   emailMessages       EmailMessage[]
   formResponses       FormResponse[]
   reminderLogs        ReminderLog[]
+  jobOffers           JobOffer[]
 
   @@index([status])
   @@index([profileTypeId])
@@ -849,4 +851,107 @@ model ReminderLog {
   @@index([reminderRuleId, status])
   @@index([careProviderId, createdAt])
   @@index([status, scheduledFor])
+}
+
+// ============================================================================
+// JOBS & OFFERS
+// ============================================================================
+
+enum JobStatus {
+  DRAFT       // being set up
+  OPEN        // accepting providers
+  FILLED      // enough providers accepted
+  CLOSED      // manually closed
+  CANCELLED
+}
+
+enum JobOfferStatus {
+  PENDING     // matched, not yet sent
+  SENT        // offer dispatched to provider
+  VIEWED      // provider opened the offer link
+  ACCEPTED
+  DECLINED
+  EXPIRED     // offer window passed with no response
+  WITHDRAWN   // admin pulled it back
+}
+
+/// A job opening we want to staff with care providers. Matching filters
+/// candidates by profile type + location + skills; offers are dispatched
+/// to the matched set and tracked individually.
+model Job {
+  id              String      @id @default(cuid())
+  title           String
+  description     String?
+  profileTypeId   String
+
+  /// Location anchor. We match on either pincode equality OR geo radius
+  /// (if home_location is present on the provider). Both are optional;
+  /// at least one should be set for meaningful matching.
+  pincode         String?
+  lat             Float?
+  lng             Float?
+  /// Match radius in km when geo-matching. Ignored if lat/lng null.
+  radiusKm        Float       @default(10)
+
+  /// Required skills — array of attribute-option values (e.g. nurse_procedures
+  /// values). A provider matches if their attribute set is a superset.
+  /// Stored as { attributeKey: string, values: string[] }[] so we can
+  /// require skills across multiple attributes.
+  requiredSkills  Json?
+
+  /// Free-form commercial details shown to the provider in the offer.
+  shiftType       String?     // e.g. "12h day", "live-in", "visit"
+  payText         String?     // e.g. "₹1,200 / shift"
+  startDate       DateTime?
+
+  /// How many providers we need. Job auto-flips to FILLED when accepted
+  /// count reaches this.
+  slots           Int         @default(1)
+  /// Offer auto-expiry window (hours). Offers older than this with no
+  /// response get marked EXPIRED by the scheduler.
+  offerTTLHours   Int         @default(48)
+
+  status          JobStatus   @default(DRAFT)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  profileType     ProfileType @relation(fields: [profileTypeId], references: [id])
+  offers          JobOffer[]
+
+  @@index([status])
+  @@index([profileTypeId])
+  @@index([pincode])
+}
+
+/// One offer of a Job to one CareProvider. Tracks the full lifecycle
+/// SENT → VIEWED → ACCEPTED/DECLINED, plus the channel it went out on.
+model JobOffer {
+  id              String         @id @default(cuid())
+  jobId           String
+  careProviderId  String
+
+  status          JobOfferStatus @default(PENDING)
+  /// Distance (km) from job to provider at match time — for ranking +
+  /// display. Null if matched by pincode equality only.
+  distanceKm      Float?
+  /// Channel the offer was dispatched on (WHATSAPP / EMAIL).
+  channel         MessageChannel?
+  /// Public token for the accept/decline page (no login needed).
+  token           String         @unique @default(cuid())
+
+  sentAt          DateTime?
+  viewedAt        DateTime?
+  respondedAt     DateTime?
+  expiresAt       DateTime?
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  job             Job            @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  careProvider    CareProvider   @relation(fields: [careProviderId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, careProviderId])
+  @@index([status])
+  @@index([careProviderId])
+  @@index([expiresAt, status])
 }

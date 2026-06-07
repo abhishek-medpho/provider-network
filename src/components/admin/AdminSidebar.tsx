@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Megaphone,
   Bell,
+  Briefcase,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -24,6 +25,7 @@ const NAV = [
   { href: "/admin/forms", label: "Forms", icon: FileText },
   { href: "/admin/messages", label: "Messages", icon: MessageSquare },
   { href: "/admin/campaigns", label: "Campaigns", icon: Megaphone },
+  { href: "/admin/jobs", label: "Jobs", icon: Briefcase },
   { href: "/admin/reminders", label: "Reminders", icon: Bell },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
