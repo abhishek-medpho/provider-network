@@ -158,6 +158,7 @@ enum FormPurpose {
   APPOINTMENT_CONFIRM       // show patient details + accept/decline buttons
   APPOINTMENT_EXECUTION     // during visit: display details + capture data
   POST_APPOINTMENT          // completion form
+  GIG_COMPLETION            // SOP form the provider fills to close a gig
   CUSTOM
 }
 
@@ -242,7 +243,7 @@ model ProfileType {
   campaigns             Campaign[]
   careProviders         CareProvider[]
   messageTemplates      MessageTemplate[]
-  jobs                  Job[]
+  gigs                  Gig[]
 
   @@index([active])
 }
@@ -303,6 +304,7 @@ model FormTemplate {
 
   profileType     ProfileType?        @relation(fields: [profileTypeId], references: [id])
   campaigns       Campaign[]
+  sopForGigs      Gig[]               @relation("GigSopForm")
 
   @@index([profileTypeId, status])
   @@index([purpose, status])
@@ -534,7 +536,8 @@ model CareProvider {
   emailMessages       EmailMessage[]
   formResponses       FormResponse[]
   reminderLogs        ReminderLog[]
-  jobOffers           JobOffer[]
+  gigResponses        GigResponse[]
+  assignedGigs        Gig[]               @relation("GigAssignee")
 
   @@index([status])
   @@index([profileTypeId])
@@ -854,104 +857,139 @@ model ReminderLog {
 }
 
 // ============================================================================
-// JOBS & OFFERS
+// GIGS — transactional dispatch (broadcast → interest → assign → reconfirm
+//        → complete). Replaces the old Job/JobOffer first-accept-wins model.
 // ============================================================================
 
-enum JobStatus {
-  DRAFT       // being set up
-  OPEN        // accepting providers
-  FILLED      // enough providers accepted
-  CLOSED      // manually closed
+enum GigType {
+  SAMPLE_COLLECTION   // phlebo collects a blood sample, drops to lab
+  HOME_NURSING_VISIT  // nurse visits patient (drug admin, dressing, etc.)
+  OTHER
+}
+
+enum GigStatus {
+  DRAFT       // being set up by ops
+  OPEN        // broadcasting / collecting willingness
+  ASSIGNED    // ops picked a provider, awaiting their reconfirmation
+  CONFIRMED   // provider reconfirmed; full details revealed; locked
+  COMPLETED   // provider submitted the SOP completion form
   CANCELLED
 }
 
-enum JobOfferStatus {
-  PENDING     // matched, not yet sent
-  SENT        // offer dispatched to provider
-  VIEWED      // provider opened the offer link
-  ACCEPTED
-  DECLINED
-  EXPIRED     // offer window passed with no response
-  WITHDRAWN   // admin pulled it back
+/// Reflects where the chosen provider is in the reconfirm handshake.
+/// Distinct from GigStatus so we can model "assigned but not yet confirmed".
+enum GigAssignmentStatus {
+  NONE        // nobody assigned yet
+  AWAITING    // assigned, waiting for provider to reconfirm
+  CONFIRMED   // provider locked it in
+  EXPIRED     // confirm window passed without response (fallback triggered)
 }
 
-/// A job opening we want to staff with care providers. Matching filters
-/// candidates by profile type + location + skills; offers are dispatched
-/// to the matched set and tracked individually.
-model Job {
+enum GigResponseStatus {
+  NOTIFIED    // broadcast delivered, no reply yet
+  INTERESTED  // provider raised their hand ("I'm available")
+  DECLINED    // provider said no
+  EXPIRED     // gig was filled/cancelled before they replied
+}
+
+/// One transactional task — a single provider's job. Created by ops (later
+/// via API). Broadcast to matched providers in waves; ops assigns one from
+/// the willing; that provider reconfirms before details are revealed; they
+/// complete the SOP form to close it.
+model Gig {
   id              String      @id @default(cuid())
-  title           String
-  description     String?
-  profileTypeId   String
+  type            GigType     @default(SAMPLE_COLLECTION)
+  title           String      // short label for ops, e.g. "Blood draw — Mr. Rao"
+  description     String?     // internal notes / instructions
+  profileTypeId   String      // which role can do this (Nurse, Phlebo, ...)
 
-  /// Location anchor. We match on either pincode equality OR geo radius
-  /// (if home_location is present on the provider). Both are optional;
-  /// at least one should be set for meaningful matching.
-  pincode         String?
-  lat             Float?
+  // ── Requester (who asked) — lightweight for v1 ──
+  requesterName   String?     // clinic / lab / doctor / patient name
+  requesterPhone  String?
+
+  // ── Patient / site. The FULL address is private — only revealed to the
+  //    confirmed provider. Area fields drive matching + the broadcast. ──
+  patientName     String?
+  siteAddress     String?     // full address — revealed on CONFIRMED only
+  siteArea        String?     // neighbourhood/landmark shown in broadcast
+  pincode         String?     // for pincode-equality matching
+  lat             Float?      // for geo-radius matching
   lng             Float?
-  /// Match radius in km when geo-matching. Ignored if lat/lng null.
-  radiusKm        Float       @default(10)
 
-  /// Required skills — array of attribute-option values (e.g. nurse_procedures
-  /// values). A provider matches if their attribute set is a superset.
-  /// Stored as { attributeKey: string, values: string[] }[] so we can
-  /// require skills across multiple attributes.
+  /// When the service must happen. The whole broadcast→assign→confirm loop
+  /// must converge before this. Drives wave-escalation timing.
+  scheduledFor    DateTime
+
+  /// Match radius (km) for the FIRST wave. Later waves widen this.
+  radiusKm        Float       @default(8)
+  /// Required skills: [{ attributeKey, values[] }]. Provider must be a
+  /// superset. Later waves may relax this.
   requiredSkills  Json?
 
-  /// Free-form commercial details shown to the provider in the offer.
-  shiftType       String?     // e.g. "12h day", "live-in", "visit"
-  payText         String?     // e.g. "₹1,200 / shift"
-  startDate       DateTime?
+  payText         String?     // "₹350 / pickup"
 
-  /// How many providers we need. Job auto-flips to FILLED when accepted
-  /// count reaches this.
-  slots           Int         @default(1)
-  /// Offer auto-expiry window (hours). Offers older than this with no
-  /// response get marked EXPIRED by the scheduler.
-  offerTTLHours   Int         @default(48)
+  /// SOP form the provider fills to complete the gig. Reuses the form engine.
+  sopFormTemplateId String?
 
-  status          JobStatus   @default(DRAFT)
+  // ── Dispatch / wave state ──
+  status          GigStatus   @default(DRAFT)
+  /// Highest broadcast wave fired so far (1 = first/closest set).
+  currentWave     Int         @default(0)
+
+  // ── Assignment / reconfirm handshake ──
+  assignedProviderId  String?
+  assignmentStatus    GigAssignmentStatus @default(NONE)
+  assignedAt          DateTime?
+  /// Provider must reconfirm by this time, else fallback to standby.
+  confirmDeadline     DateTime?
+  confirmedAt         DateTime?
+
+  completedAt     DateTime?
+  cancelledAt     DateTime?
+  cancelReason    String?
+
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
-  profileType     ProfileType @relation(fields: [profileTypeId], references: [id])
-  offers          JobOffer[]
+  profileType     ProfileType   @relation(fields: [profileTypeId], references: [id])
+  sopFormTemplate FormTemplate? @relation("GigSopForm", fields: [sopFormTemplateId], references: [id])
+  assignedProvider CareProvider? @relation("GigAssignee", fields: [assignedProviderId], references: [id])
+  responses       GigResponse[]
 
   @@index([status])
   @@index([profileTypeId])
-  @@index([pincode])
+  @@index([scheduledFor])
+  @@index([assignmentStatus, confirmDeadline])
 }
 
-/// One offer of a Job to one CareProvider. Tracks the full lifecycle
-/// SENT → VIEWED → ACCEPTED/DECLINED, plus the channel it went out on.
-model JobOffer {
-  id              String         @id @default(cuid())
-  jobId           String
+/// One provider's participation in one gig's broadcast. The INTERESTED
+/// rows (minus the assigned one) form the ranked standby bench.
+model GigResponse {
+  id              String            @id @default(cuid())
+  gigId           String
   careProviderId  String
 
-  status          JobOfferStatus @default(PENDING)
-  /// Distance (km) from job to provider at match time — for ranking +
-  /// display. Null if matched by pincode equality only.
+  status          GigResponseStatus @default(NOTIFIED)
+  /// Which broadcast wave this provider was reached in (1, 2, ...).
+  wave            Int               @default(1)
+  /// Distance (km) at match time, for ranking the standby bench + display.
   distanceKm      Float?
-  /// Channel the offer was dispatched on (WHATSAPP / EMAIL).
+  /// Channel the broadcast went out on.
   channel         MessageChannel?
-  /// Public token for the accept/decline page (no login needed).
-  token           String         @unique @default(cuid())
+  /// Public token for the "I'm available" response page.
+  token           String            @unique @default(cuid())
 
-  sentAt          DateTime?
-  viewedAt        DateTime?
-  respondedAt     DateTime?
-  expiresAt       DateTime?
+  notifiedAt      DateTime?
+  respondedAt     DateTime?         // when they hit interested/declined
 
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 
-  job             Job            @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  careProvider    CareProvider   @relation(fields: [careProviderId], references: [id], onDelete: Cascade)
+  gig             Gig          @relation(fields: [gigId], references: [id], onDelete: Cascade)
+  careProvider    CareProvider @relation(fields: [careProviderId], references: [id], onDelete: Cascade)
 
-  @@unique([jobId, careProviderId])
+  @@unique([gigId, careProviderId])
   @@index([status])
   @@index([careProviderId])
-  @@index([expiresAt, status])
+  @@index([gigId, status])
 }

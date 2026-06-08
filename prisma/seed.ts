@@ -1084,32 +1084,58 @@ const messageTemplates = [
       "<!doctype html><html><body style=\"font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#18181b;max-width:560px;margin:0 auto;padding:24px;\">\n  <h1 style=\"font-size:20px;margin:0 0 16px;\">Thanks, {{name}} ✅</h1>\n  <p>We've saved your profile. Our team will verify it over the next 24–48 hours, then you'll start receiving job offers in your area on WhatsApp.</p>\n  <p style=\"color:#71717a;font-size:13px;margin-top:24px;\">— Labstack Network</p>\n</body></html>",
     variables: ["name"],
   },
+  // ── Gig dispatch templates ──
   {
-    code: "job_offer",
-    name: "Job offer — WhatsApp",
+    code: "gig_broadcast",
+    name: "Gig broadcast — WhatsApp",
     kind: "CUSTOM" as const,
     body:
-      "Hi {{name}}! 💼\n\nNew job near you:\n*{{job_title}}*\n{{shift}} · {{pay}}\nArea: {{pincode}}\n\nTap to accept or decline:\n{{offer_link}}",
+      "Hi {{name}}! 🩸\n\nA {{task}} is available near you:\n📍 {{area}}\n🕑 {{when}}\n💰 {{pay}}\n\nAvailable? Tap to let us know:\n{{respond_link}}\n\n(Exact address shared once you're confirmed.)",
+    variables: ["name", "task", "area", "when", "pay", "respond_link"],
+  },
+  {
+    code: "gig_broadcast_email",
+    name: "Gig broadcast — Email",
+    kind: "CUSTOM" as const,
+    channel: "EMAIL" as const,
+    subject: "A {{task}} near you — {{when}}",
+    body:
+      "Hi {{name}},\n\nA {{task}} is available near you:\nArea: {{area}}\nWhen: {{when}}\nPay: {{pay}}\n\nLet us know if you're available: {{respond_link}}\n\n(Exact address is shared once you're confirmed.)\n\n— Labstack",
+    html:
+      "<!doctype html><html><body style=\"font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#18181b;max-width:560px;margin:0 auto;padding:24px;\">\n  <h1 style=\"font-size:20px;margin:0 0 12px;text-transform:capitalize;\">{{task}}</h1>\n  <p style=\"margin:0 0 2px;\">📍 {{area}}</p>\n  <p style=\"margin:0 0 2px;\">🕑 {{when}}</p>\n  <p style=\"margin:0 0 20px;\">💰 {{pay}}</p>\n  <p style=\"margin:24px 0;\"><a href=\"{{respond_link}}\" style=\"display:inline-block;background:#059669;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600;\">I'm available</a></p>\n  <p style=\"color:#71717a;font-size:12px;\">Exact address is shared once you're confirmed.</p>\n</body></html>",
+    variables: ["name", "task", "area", "when", "pay", "respond_link"],
+  },
+  {
+    code: "gig_reconfirm",
+    name: "Gig reconfirm — WhatsApp",
+    kind: "CUSTOM" as const,
+    body:
+      "Hi {{name}}! ✅\n\nYou've been selected for the {{task}}.\n\nReply by *{{confirm_by}}* to lock it in:\n{{confirm_link}}\n\nWe'll send you the full address as soon as you confirm.",
+    variables: ["name", "task", "confirm_by", "confirm_link"],
+  },
+  {
+    code: "gig_assigned",
+    name: "Gig assigned (confirmed) — WhatsApp",
+    kind: "CUSTOM" as const,
+    body:
+      "You're confirmed for the {{task}}! 🎉\n\n🕑 {{when}}\n👤 {{patient_name}}\n📍 {{address}}\n☎️ {{requester_phone}}\n\nAfter you're done, fill the report here:\n{{complete_link}}",
     variables: [
       "name",
-      "job_title",
-      "shift",
-      "pay",
-      "pincode",
-      "offer_link",
+      "task",
+      "when",
+      "patient_name",
+      "address",
+      "requester_phone",
+      "complete_link",
     ],
   },
   {
-    code: "job_offer_email",
-    name: "Job offer — Email",
+    code: "gig_filled",
+    name: "Gig filled (standby) — WhatsApp",
     kind: "CUSTOM" as const,
-    channel: "EMAIL" as const,
-    subject: "New job near you: {{job_title}}",
     body:
-      "Hi {{name}},\n\nA new job has come up near you:\n\n{{job_title}}\n{{shift}} · {{pay}}\nArea: {{pincode}}\n\nAccept or decline here: {{offer_link}}\n\n— Labstack",
-    html:
-      "<!doctype html><html><body style=\"font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#18181b;max-width:560px;margin:0 auto;padding:24px;\">\n  <h1 style=\"font-size:20px;margin:0 0 12px;\">💼 {{job_title}}</h1>\n  <p style=\"margin:0 0 4px;\"><strong>{{shift}}</strong> · {{pay}}</p>\n  <p style=\"margin:0 0 20px;color:#71717a;\">Area: {{pincode}}</p>\n  <p style=\"margin:24px 0;\">\n    <a href=\"{{offer_link}}\" style=\"display:inline-block;background:#18181b;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600;\">View &amp; respond</a>\n  </p>\n  <p style=\"color:#71717a;font-size:13px;margin-top:24px;\">— Labstack Network</p>\n</body></html>",
-    variables: ["name", "job_title", "shift", "pay", "pincode", "offer_link"],
+      "Hi {{name}}, thanks for raising your hand! This one's been filled, but we'll ping you for the next job near you. 🙏",
+    variables: ["name"],
   },
   {
     code: "verified_active",

@@ -73,14 +73,7 @@ export type FormAction = {
 };
 
 /** Helpers to produce sane defaults when creating a new form. */
-export function defaultActionsForPurpose(
-  purpose:
-    | "ONBOARDING"
-    | "APPOINTMENT_CONFIRM"
-    | "APPOINTMENT_EXECUTION"
-    | "POST_APPOINTMENT"
-    | "CUSTOM",
-): FormAction[] {
+export function defaultActionsForPurpose(purpose: string): FormAction[] {
   switch (purpose) {
     case "ONBOARDING":
       return [
@@ -106,14 +99,7 @@ export function defaultActionsForPurpose(
   }
 }
 
-export function defaultStarterSections(
-  purpose:
-    | "ONBOARDING"
-    | "APPOINTMENT_CONFIRM"
-    | "APPOINTMENT_EXECUTION"
-    | "POST_APPOINTMENT"
-    | "CUSTOM",
-): FormSection[] {
+export function defaultStarterSections(purpose: string): FormSection[] {
   switch (purpose) {
     case "APPOINTMENT_CONFIRM":
       return [

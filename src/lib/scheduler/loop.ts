@@ -43,9 +43,9 @@ export function startInProcessScheduler(): void {
         `[scheduler] dispatch tick: ${r.sent} sent, ${r.failed} failed across ${r.campaignsProcessed} campaign(s)`,
       );
     }
-    // Expire stale job offers on the same cadence — cheap single UPDATE.
-    const { runExpiryTick } = await import("@/lib/jobs/expiry");
-    await runExpiryTick();
+    // Gig reconfirm-deadline + wave-escalation pass on the same cadence.
+    const { runGigSchedulerTick } = await import("@/lib/gigs/scheduler");
+    await runGigSchedulerTick();
   });
 
   scheduleRecurring("reminders", REMINDER_INTERVAL_MS, async () => {
